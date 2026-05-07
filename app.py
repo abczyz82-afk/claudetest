@@ -81,31 +81,16 @@ for k, v in {
 # ══════════════════════════════════════════════════════════════
 # DỮ LIỆU – VNSTOCK THỰC + FALLBACK MÔ PHỎNG
 # ══════════════════════════════════════════════════════════════
-# ══════════════════════════════════════════════════════════════
-# TIỆN ÍCH NGÀY ĐÁO HẠN VN30F1M
-# ══════════════════════════════════════════════════════════════
 def get_third_thursday(year: int, month: int) -> datetime:
     """Trả về ngày thứ 5 tuần thứ 3 của tháng (ngày đáo hạn VN30F)."""
     first_day = datetime(year, month, 1)
-    # weekday(): Mon=0 … Sun=6  → Thu=3
     days_to_thu = (3 - first_day.weekday()) % 7
     first_thu   = first_day + timedelta(days=days_to_thu)
-    return first_thu + timedelta(weeks=2)          # tuần thứ 3
+    return first_thu + timedelta(weeks=2)
 
 
 def get_vn30f1m_expiry_info() -> dict:
-    """
-    Trả về thông tin đáo hạn hợp đồng VN30F1M hiện tại:
-      - last_expiry  : ngày đáo hạn trước (= ngày hợp đồng hiện tại bắt đầu)
-      - next_expiry  : ngày đáo hạn tiếp theo
-      - days_since   : số ngày kể từ khi hợp đồng bắt đầu
-      - days_to      : số ngày còn đến đáo hạn
-      - contract_name: tên tháng hợp đồng (VD "VN30F2506")
-      - exact_symbol : mã chính xác cho API (VD "VN30F2605")
-    """
     now = datetime.now(VN_TZ)
-
-    # Đáo hạn tháng hiện tại
     curr_exp = get_third_thursday(now.year, now.month)
 
     if now.date() > curr_exp.date():
@@ -123,12 +108,7 @@ def get_vn30f1m_expiry_info() -> dict:
 
     days_since = (now.date() - last_exp.date()).days
     days_to    = (next_exp.date() - now.date()).days
-
-    # Tên hiển thị kiểu VN30F2506 (năm 2 chữ số + tháng 2 chữ số)
     contract_name = f"VN30F{str(contract_year)[-2:]}{contract_month:02d}"
-
-    # Mã chính xác để query vnstock: VN30F2605 (năm trước, tháng sau)
-    # vnstock dùng format: VN30F[YY][MM] trong đó YY=2 số cuối năm, MM=tháng 2 chữ số
     exact_symbol = f"VN30F{str(contract_year)[-2:]}{contract_month:02d}"
 
     return {
@@ -140,44 +120,41 @@ def get_vn30f1m_expiry_info() -> dict:
         "exact_symbol":   exact_symbol,
     }
 
-
 def smart_days_back(symbol: str, tf_minutes: int) -> int:
-    """
-    Tính số ngày lấy dữ liệu phù hợp:
-    - Với VN30F1M: dựa theo vòng đời hợp đồng (tránh yêu cầu dữ liệu
-      trước khi hợp đồng tồn tại).
-    - Đảm bảo đủ bars để tính chỉ báo (EMA200 cần ≥ 200 bars).
-    """
     if "VN30F1M" not in symbol:
         return 14 if tf_minutes <= 5 else 60
-
     info = get_vn30f1m_expiry_info()
-    # Hợp đồng tối đa sống ~22 ngày làm việc (~31 ngày dương lịch)
-    # Lấy tối đa số ngày đã có dữ liệu + 2 ngày đệm
     max_available = max(info["days_since"] + 2, 5)
-
     if tf_minutes == 1:
-        # 1-phút cần nhiều bars → lấy tối đa nhưng không quá 14 ngày
         return min(max_available, 14)
     else:
-        # 5-phút: lấy thoải mái hơn
         return min(max_available, 31)
 
-
 def is_trading_hours() -> bool:
-    """Kiểm tra có đang trong giờ giao dịch HOSE không (giờ Việt Nam)."""
     now = datetime.now(VN_TZ)
-    # HOSE: Thứ 2-6, 09:00–11:30 và 13:00–14:45
-    if now.weekday() >= 5:        # Thứ 7, CN
+    if now.weekday() >= 5:
         return False
     t = now.time()
     from datetime import time as dtime
     return (dtime(9, 0) <= t <= dtime(11, 30)) or (dtime(13, 0) <= t <= dtime(14, 45))
 
 
-# ══════════════════════════════════════════════════════════════
-# DATA FETCHING (DÙNG VNSTOCK 0.2.8.2)
-# ══════════════════════════════════════════════════════════════
+# Dummy fallback in case API fetch fails
+def _simulate(tf_minutes: int, n: int, seed: int) -> pd.DataFrame:
+    np.random.seed(abs(seed) % (2**32 - 1))
+    now = datetime.now(VN_TZ)
+    times = [now - timedelta(minutes=tf_minutes * i) for i in range(n)]
+    times.reverse()
+    closes = 1200 + np.random.randn(n).cumsum() * 2
+    opens = closes + np.random.randn(n)
+    highs = np.maximum(opens, closes) + np.random.rand(n) * 2
+    lows = np.minimum(opens, closes) - np.random.rand(n) * 2
+    vols = np.random.randint(100, 5000, size=n)
+    df = pd.DataFrame({"time": times, "open": opens, "high": highs, "low": lows, "close": closes, "volume": vols})
+    df["time"] = pd.to_datetime(df["time"])
+    df = df.set_index("time")
+    return df
+
 @st.cache_data(ttl=30, show_spinner=False)
 def fetch_data(symbol: str, tf_minutes: int, days_back: int = 7) -> pd.DataFrame:
     end_date   = (datetime.now(VN_TZ) + timedelta(days=1)).strftime("%Y-%m-%d")
@@ -205,7 +182,7 @@ def fetch_data(symbol: str, tf_minutes: int, days_back: int = 7) -> pd.DataFrame
         except Exception:
             continue
 
-    df_sim = _simulate(tf_minutes, n=350, seed=hash(symbol + str(tf_minutes)) % 9999)
+    df_sim = _simulate(tf_minutes, n=350, seed=abs(hash(symbol + str(tf_minutes))) % 9999)
     df_sim.attrs["_simulated"] = True
     return df_sim
 
@@ -225,13 +202,11 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
         for i in range(p, len(arr)): r[i] = arr[i]*k + r[i-1]*(1-k)
         return r
 
-    # EMAs
     df["ema9"]  = ema(c, 9)
     df["ema21"] = ema(c, 21)
     df["ema50"] = ema(c, 50)
     df["ema200"]= ema(c, 200)
 
-    # Bollinger Bands
     rm = pd.Series(c).rolling(20).mean().values
     rs = pd.Series(c).rolling(20).std().values
     df["bb_mid"]   = rm
@@ -239,21 +214,18 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df["bb_lower"] = rm - 2*rs
     df["bb_width"] = (df["bb_upper"] - df["bb_lower"]) / pd.Series(rm).replace(0, np.nan).values
 
-    # RSI
     d = pd.Series(c).diff()
     g_ = d.clip(lower=0).rolling(14).mean()
     l_ = (-d.clip(upper=0)).rolling(14).mean().replace(0, np.nan)
     df["rsi"] = (100 - 100/(1 + g_/l_)).fillna(50)
 
-    # MACD
     e12, e26   = ema(c,12), ema(c,26)
     ml         = e12 - e26
     df["macd"]        = ml
     df["macd_signal"] = ema(np.nan_to_num(ml), 9)
     df["macd_hist"]   = ml - df["macd_signal"].values
-    df["macd_slope"]  = pd.Series(df["macd_hist"].values).diff(3)   # slope 3 nến
+    df["macd_slope"]  = pd.Series(df["macd_hist"].values).diff(3)
 
-    # ATR / ADX / DI
     df["prev_close"] = df["close"].shift(1)
     df["tr"] = df[["high","low","prev_close"]].apply(
         lambda r: max(r["high"]-r["low"], abs(r["high"]-r["prev_close"]), abs(r["low"]-r["prev_close"])), axis=1)
@@ -270,46 +242,36 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df["dx"]     = 100 * (df["di_pos"]-df["di_neg"]).abs() / (df["di_pos"]+df["di_neg"]).replace(0, np.nan)
     df["adx"]    = rma(df["dx"], 14)
 
-    # Stochastic
     lo14 = pd.Series(l).rolling(14).min(); hi14 = pd.Series(h).rolling(14).max()
     k_   = (pd.Series(c)-lo14)/(hi14-lo14+1e-9)*100
     df["stoch_k"] = k_.rolling(3).mean(); df["stoch_d"] = df["stoch_k"].rolling(3).mean()
 
-    # ── VWAP + Bands (reset theo ngày) ──
     df["date_"]  = df.index.date
     df["tp_"]    = (df["high"] + df["low"] + df["close"]) / 3
     df["cum_tv"] = (df["tp_"] * df["volume"]).groupby(df["date_"]).cumsum()
     df["cum_v"]  = df["volume"].groupby(df["date_"]).cumsum()
     df["vwap"]   = df["cum_tv"] / df["cum_v"].replace(0, np.nan)
 
-    # VWAP Standard Deviation Bands (±1σ, ±2σ)
-    # Variance tích lũy: Σ(vol × (tp - vwap)²) / Σvol
     df["_tp_vwap_sq"] = df["volume"] * (df["tp_"] - df["vwap"]) ** 2
     df["_cum_var"]    = df["_tp_vwap_sq"].groupby(df["date_"]).cumsum()
     df["vwap_sd"]     = np.sqrt(df["_cum_var"] / df["cum_v"].replace(0, np.nan))
-    df["vwap_u1"]     = df["vwap"] + 1 * df["vwap_sd"]   # +1σ
-    df["vwap_u2"]     = df["vwap"] + 2 * df["vwap_sd"]   # +2σ
-    df["vwap_l1"]     = df["vwap"] - 1 * df["vwap_sd"]   # -1σ
-    df["vwap_l2"]     = df["vwap"] - 2 * df["vwap_sd"]   # -2σ
+    df["vwap_u1"]     = df["vwap"] + 1 * df["vwap_sd"]
+    df["vwap_u2"]     = df["vwap"] + 2 * df["vwap_sd"]
+    df["vwap_l1"]     = df["vwap"] - 1 * df["vwap_sd"]
+    df["vwap_l2"]     = df["vwap"] - 2 * df["vwap_sd"]
 
-    # VWAP deviation % (giá cách VWAP bao nhiêu %)
     df["vwap_dev_pct"] = (df["close"] - df["vwap"]) / df["vwap"].replace(0, np.nan) * 100
 
-    # VWAP cross signals
     df["vwap_buy"]  = (df["close"] > df["vwap"]) & (df["close"].shift(1) <= df["vwap"].shift(1))
     df["vwap_sell"] = (df["close"] < df["vwap"]) & (df["close"].shift(1) >= df["vwap"].shift(1))
-
-    # VWAP band bounce (chạm ±2σ rồi hồi)
     df["vwap_bounce_up"]  = (df["low"].shift(1) <= df["vwap_l2"].shift(1)) & (df["close"] > df["vwap_l2"])
     df["vwap_bounce_dn"]  = (df["high"].shift(1) >= df["vwap_u2"].shift(1)) & (df["close"] < df["vwap_u2"])
 
     df.drop(["prev_close","up_move","down_move","+dm","-dm","dx",
              "date_","tp_","cum_tv","cum_v","_tp_vwap_sq","_cum_var"], axis=1, inplace=True, errors="ignore")
 
-    # Volume MA
     df["vol_ma"] = pd.Series(df["volume"].values).rolling(20).mean().values
 
-    # Tín hiệu cắt đơn
     df["ema_buy"]     = (df["ema9"]>df["ema21"]) & (df["ema9"].shift(1)<=df["ema21"].shift(1))
     df["ema_sell"]    = (df["ema9"]<df["ema21"]) & (df["ema9"].shift(1)>=df["ema21"].shift(1))
     df["macd_buy"]    = (df["macd_hist"]>0)  & (df["macd_hist"].shift(1)<=0)
@@ -320,10 +282,6 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-# ══════════════════════════════════════════════════════════════
-# NHẬN DIỆN MẪU NẾN – 17 mẫu + context scoring
-# ══════════════════════════════════════════════════════════════
-# Độ tin cậy thống kê của từng mẫu (lịch sử nghiên cứu)
 PATTERN_BASE_RELIABILITY = {
     "Morning Star":        82, "Evening Star":       80,
     "Three White Soldiers":78, "Three Black Crows":  77,
@@ -337,10 +295,6 @@ PATTERN_BASE_RELIABILITY = {
 }
 
 def detect_candle_patterns(df: pd.DataFrame) -> list:
-    """
-    Nhận diện 17 mẫu nến. Mỗi mẫu trả về:
-      name, bias, desc, reliability (%), context_bonus, quality (A/B/C)
-    """
     patterns = []
     if len(df) < 5: return patterns
 
@@ -359,7 +313,6 @@ def detect_candle_patterns(df: pd.DataFrame) -> list:
     o3,h3,lo3,cl3,bd3,rg3,_,_      = vals(c3)
     o4,h4,lo4,cl4,bd4,rg4,_,_      = vals(c4)
 
-    # ── Context: nến đang ở vùng nào? ──
     vwap       = float(c0.get("vwap", 0)   or 0)
     bb_lo_val  = float(c0.get("bb_lower",0) or 0)
     bb_up_val  = float(c0.get("bb_upper",9999) or 9999)
@@ -375,7 +328,6 @@ def detect_candle_patterns(df: pd.DataFrame) -> list:
     vol_spike  = float(c0.get("volume",0)) > float(c0.get("vol_ma",1) or 1) * 1.5
 
     def ctx_bonus(bias):
-        """Điểm thưởng context: mẫu xuất hiện đúng vùng hỗ trợ/kháng cự."""
         b = 0
         if bias == "BULL":
             if at_bb_low:  b += 12
@@ -403,106 +355,51 @@ def detect_candle_patterns(df: pd.DataFrame) -> list:
             "quality": ql, "quality_color": qc,
         })
 
-    # ────────── 1-NẾN ──────────
-    # Hammer
     if (bd0/rg0 < 0.35) and (lw0/rg0 > 0.55) and (uw0/rg0 < 0.15) and cl1 < o1:
         add("Hammer","BULL","Nến búa – đảo chiều tăng tại đáy. Râu dưới dài ≥ 2× thân")
-
-    # Inverted Hammer (nến búa ngược)
     if (bd0/rg0 < 0.35) and (uw0/rg0 > 0.55) and (lw0/rg0 < 0.15) and cl1 < o1:
         add("Hammer","BULL","Inverted Hammer – xác nhận tăng nếu nến sau đóng cao hơn")
-
-    # Shooting Star
     if (bd0/rg0 < 0.35) and (uw0/rg0 > 0.55) and (lw0/rg0 < 0.15) and cl1 > o1:
         add("Shooting Star","BEAR","Nến sao băng – đảo chiều giảm tại đỉnh. Râu trên dài ≥ 2× thân")
-
-    # Doji
     if bd0/rg0 < 0.07:
         add("Doji","NEUTRAL","Do dự hoàn toàn – sắp đảo chiều. Mở=Đóng")
-
-    # Spinning Top (thân nhỏ, râu cả 2 phía)
     if (bd0/rg0 < 0.25) and (uw0/rg0 > 0.2) and (lw0/rg0 > 0.2):
         add("Spinning Top","NEUTRAL","Thân nhỏ, râu 2 phía – bull/bear đang giằng co")
-
-    # Marubozu Bull (nến xanh thân đầy, không râu)
     if cl0 > o0 and bd0/rg0 > 0.88:
         add("Marubozu Bull","BULL","Nến xanh thân đầy – lực mua áp đảo hoàn toàn")
-
-    # Marubozu Bear
     if cl0 < o0 and bd0/rg0 > 0.88:
         add("Marubozu Bear","BEAR","Nến đỏ thân đầy – lực bán áp đảo hoàn toàn")
 
-    # ────────── 2-NẾN ──────────
-    # Bullish Engulfing
     if cl1 < o1 and cl0 > o0 and cl0 > o1 and o0 < cl1 and bd0 > bd1:
         add("Bull Engulfing","BULL","Nến xanh nuốt trọn nến đỏ – đảo chiều tăng mạnh")
-
-    # Bearish Engulfing
     if cl1 > o1 and cl0 < o0 and cl0 < o1 and o0 > cl1 and bd0 > bd1:
         add("Bear Engulfing","BEAR","Nến đỏ nuốt trọn nến xanh – đảo chiều giảm mạnh")
-
-    # Bullish Harami
     if cl1 < o1 and cl0 > o0 and cl0 < o1 and o0 > cl1 and bd0 < bd1 * 0.5:
         add("Bullish Harami","BULL","Nến xanh nhỏ trong bụng nến đỏ lớn – mẫu đảo chiều yếu hơn")
-
-    # Bearish Harami
     if cl1 > o1 and cl0 < o0 and cl0 > o1 and o0 < cl1 and bd0 < bd1 * 0.5:
         add("Bearish Harami","BEAR","Nến đỏ nhỏ trong bụng nến xanh lớn – nguy cơ đảo chiều")
-
-    # Piercing Line (cắt qua đường giữa)
-    if (cl1 < o1 and cl0 > o0 and
-        o0 < cl1 and cl0 > (o1 + cl1) / 2 and cl0 < o1):
+    if (cl1 < o1 and cl0 > o0 and o0 < cl1 and cl0 > (o1 + cl1) / 2 and cl0 < o1):
         add("Piercing Line","BULL","Nến xanh mở dưới đáy nến đỏ, đóng trên ½ thân nến đỏ")
-
-    # Dark Cloud Cover
-    if (cl1 > o1 and cl0 < o0 and
-        o0 > h1 and cl0 < (o1 + cl1) / 2 and cl0 > o1):
+    if (cl1 > o1 and cl0 < o0 and o0 > h1 and cl0 < (o1 + cl1) / 2 and cl0 > o1):
         add("Dark Cloud Cover","BEAR","Nến đỏ mở trên đỉnh nến xanh, đóng dưới ½ thân nến xanh")
-
-    # Tweezer Bottom
     if abs(lo0 - lo1) / rg0 < 0.03 and cl1 < o1 and cl0 > o0:
         add("Tweezer Bottom","BULL","Hai nến chạm cùng đáy – vùng hỗ trợ rất mạnh")
-
-    # Tweezer Top
     if abs(h0 - h1) / rg0 < 0.03 and cl1 > o1 and cl0 < o0:
         add("Tweezer Top","BEAR","Hai nến chạm cùng đỉnh – vùng kháng cự rất mạnh")
 
-    # ────────── 3-NẾN ──────────
-    # Morning Star
-    if (cl2 < o2 and bd2/rg2 > 0.5 and
-        bd1/rg1 < 0.3 and
-        cl0 > o0 and cl0 >= (o2 + cl2) / 2):
+    if (cl2 < o2 and bd2/rg2 > 0.5 and bd1/rg1 < 0.3 and cl0 > o0 and cl0 >= (o2 + cl2) / 2):
         add("Morning Star","BULL","3 nến: đỏ lớn → nhỏ (do dự) → xanh lớn. Đảo chiều tăng mạnh")
-
-    # Evening Star
-    if (cl2 > o2 and bd2/rg2 > 0.5 and
-        bd1/rg1 < 0.3 and
-        cl0 < o0 and cl0 <= (o2 + cl2) / 2):
+    if (cl2 > o2 and bd2/rg2 > 0.5 and bd1/rg1 < 0.3 and cl0 < o0 and cl0 <= (o2 + cl2) / 2):
         add("Evening Star","BEAR","3 nến: xanh lớn → nhỏ (do dự) → đỏ lớn. Đảo chiều giảm mạnh")
-
-    # Three White Soldiers (3 nến xanh tăng dần)
-    if (cl0>o0 and cl1>o1 and cl2>o2 and
-        cl0>cl1>cl2 and o0>o1>o2 and
-        bd0/rg0>0.6 and bd1/rg1>0.6 and bd2/rg2>0.6):
+    if (cl0>o0 and cl1>o1 and cl2>o2 and cl0>cl1>cl2 and o0>o1>o2 and bd0/rg0>0.6 and bd1/rg1>0.6 and bd2/rg2>0.6):
         add("Three White Soldiers","BULL","3 nến xanh tăng liên tiếp – xu hướng tăng rất mạnh")
-
-    # Three Black Crows (3 nến đỏ giảm dần)
-    if (cl0<o0 and cl1<o1 and cl2<o2 and
-        cl0<cl1<cl2 and o0<o1<o2 and
-        bd0/rg0>0.6 and bd1/rg1>0.6 and bd2/rg2>0.6):
+    if (cl0<o0 and cl1<o1 and cl2<o2 and cl0<cl1<cl2 and o0<o1<o2 and bd0/rg0>0.6 and bd1/rg1>0.6 and bd2/rg2>0.6):
         add("Three Black Crows","BEAR","3 nến đỏ giảm liên tiếp – xu hướng giảm rất mạnh")
 
     return patterns
 
 
-# ══════════════════════════════════════════════════════════════
-# SCAN LỊCH SỬ MẪU NẾN (toàn bộ chart)
-# ══════════════════════════════════════════════════════════════
 def scan_pattern_history(df: pd.DataFrame, lookback: int = 150) -> list:
-    """
-    Quét N nến gần nhất, trả về list dict có thêm 'time','price','chart_y'
-    cho annotations trên biểu đồ.
-    """
     results = []
     df_s = df.tail(lookback + 5).copy()
     seen_times = set()
@@ -524,12 +421,7 @@ def scan_pattern_history(df: pd.DataFrame, lookback: int = 150) -> list:
 
     return results
 
-
-# ══════════════════════════════════════════════════════════════
-# RSI DIVERGENCE
-# ══════════════════════════════════════════════════════════════
 def detect_rsi_divergence(df: pd.DataFrame, lookback: int = 30) -> dict:
-    """Phát hiện divergence RSI trong N nến gần nhất."""
     sub = df.dropna(subset=["rsi"]).tail(lookback)
     if len(sub) < 10:
         return {"bull": False, "bear": False, "desc": ""}
@@ -537,7 +429,6 @@ def detect_rsi_divergence(df: pd.DataFrame, lookback: int = 30) -> dict:
     prices = sub["close"].values
     rsis   = sub["rsi"].values
 
-    # Bullish divergence: giá tạo đáy mới nhưng RSI không
     price_lows = [(i, prices[i]) for i in range(1, len(prices)-1)
                   if prices[i] < prices[i-1] and prices[i] < prices[i+1]]
     bull_div = False
@@ -546,7 +437,6 @@ def detect_rsi_divergence(df: pd.DataFrame, lookback: int = 30) -> dict:
         if p2 < p1 and rsis[i2] > rsis[i1] + 2:
             bull_div = True
 
-    # Bearish divergence: giá tạo đỉnh mới nhưng RSI không
     price_highs = [(i, prices[i]) for i in range(1, len(prices)-1)
                    if prices[i] > prices[i-1] and prices[i] > prices[i+1]]
     bear_div = False
@@ -561,12 +451,7 @@ def detect_rsi_divergence(df: pd.DataFrame, lookback: int = 30) -> dict:
 
     return {"bull": bull_div, "bear": bear_div, "desc": desc}
 
-
-# ══════════════════════════════════════════════════════════════
-# VOLUME ACCUMULATION ANALYSIS
-# ══════════════════════════════════════════════════════════════
 def analyze_volume_accumulation(df: pd.DataFrame, window: int = 10) -> dict:
-    """So sánh tổng volume nến xanh vs đỏ trong N nến gần nhất."""
     sub = df.tail(window)
     bull_vol = sub.loc[sub["close"] >= sub["open"], "volume"].sum()
     bear_vol = sub.loc[sub["close"] <  sub["open"], "volume"].sum()
@@ -577,45 +462,31 @@ def analyze_volume_accumulation(df: pd.DataFrame, window: int = 10) -> dict:
     elif ratio < 0.35: bias, desc = "BEAR", f"Bán ({(1-ratio)*100:.0f}%) áp đảo Mua ({ratio*100:.0f}%)"
     else:              bias, desc = "NEUTRAL", f"Cân bằng (Mua {ratio*100:.0f}% / Bán {(1-ratio)*100:.0f}%)"
 
-    # Nến lớn gần nhất
     avg_vol = float(df["vol_ma"].iloc[-1]) if not np.isnan(df["vol_ma"].iloc[-1]) else 1
     last_vol_ratio = float(df["volume"].iloc[-1]) / max(avg_vol, 1)
 
     return {"bull_vol": bull_vol, "bear_vol": bear_vol, "ratio": ratio,
             "bias": bias, "desc": desc, "last_vol_ratio": last_vol_ratio}
 
-
-# ══════════════════════════════════════════════════════════════
-# CONFLUENCE SCORE ENGINE  (-100 → +100)
-# ══════════════════════════════════════════════════════════════
 def compute_confluence(df1: pd.DataFrame, df5: pd.DataFrame) -> dict:
-    """
-    Tổng hợp tất cả tín hiệu thành một điểm duy nhất.
-    Dương = tăng, Âm = giảm. |score| ≥ 70 → Khuyến nghị mạnh.
-    """
     score  = 0
-    detail = []   # list of (weight, label, color)
+    detail = []
 
     def safe(df, col, default=0):
         v = df.iloc[-1].get(col, default)
         return default if (v is None or (isinstance(v, float) and np.isnan(v))) else float(v)
 
-    # ── Dữ liệu khung 1P ──
     adx1   = safe(df1,"adx",20); di1p = safe(df1,"di_pos",20); di1n = safe(df1,"di_neg",20)
     ema9_1 = safe(df1,"ema9");   ema21_1 = safe(df1,"ema21"); ema50_1 = safe(df1,"ema50")
     rsi1   = safe(df1,"rsi",50); macd_h1 = safe(df1,"macd_hist"); macd_sl1 = safe(df1,"macd_slope")
     bb_up1 = safe(df1,"bb_upper"); bb_lo1 = safe(df1,"bb_lower"); close1 = float(df1["close"].iloc[-1])
     vwap1  = safe(df1,"vwap"); bb_w1 = safe(df1,"bb_width",0.03); stk1 = safe(df1,"stoch_k",50)
 
-    # ── Dữ liệu khung 5P ──
     adx5   = safe(df5,"adx",20); di5p = safe(df5,"di_pos",20); di5n = safe(df5,"di_neg",20)
     ema9_5 = safe(df5,"ema9");   ema21_5 = safe(df5,"ema21")
     rsi5   = safe(df5,"rsi",50); macd_h5 = safe(df5,"macd_hist"); macd_sl5 = safe(df5,"macd_slope")
     close5 = float(df5["close"].iloc[-1])
 
-    # ─────────────────────────────
-    # 1. ADX + Hướng (25 điểm)
-    # ─────────────────────────────
     if adx5 >= 22:
         w = min(int((adx5 - 22) / 13 * 25), 25)
         if di5p > di5n:
@@ -625,9 +496,6 @@ def compute_confluence(df1: pd.DataFrame, df5: pd.DataFrame) -> dict:
     else:
         detail.append((0, f"ADX 5P={adx5:.1f} → SIDEWAY (0đ)", "#ffd600"))
 
-    # ─────────────────────────────
-    # 2. EMA Xếp hàng 1P (15 điểm)
-    # ─────────────────────────────
     if ema9_1 > ema21_1 > ema50_1:
         score += 15; detail.append((15,"EMA9>21>50 → BULL 1P","#00e676"))
     elif ema9_1 < ema21_1 < ema50_1:
@@ -635,9 +503,6 @@ def compute_confluence(df1: pd.DataFrame, df5: pd.DataFrame) -> dict:
     else:
         detail.append((0,"EMA chưa xếp hàng rõ","#475569"))
 
-    # ─────────────────────────────
-    # 3. EMA 1P vs 5P đồng thuận (20 điểm)
-    # ─────────────────────────────
     bull1 = ema9_1 > ema21_1; bull5 = ema9_5 > ema21_5
     if bull1 and bull5:
         score += 20; detail.append((20,"EMA 1P & 5P đều BULL → Đồng thuận LONG","#00e676"))
@@ -646,9 +511,6 @@ def compute_confluence(df1: pd.DataFrame, df5: pd.DataFrame) -> dict:
     else:
         detail.append((0,"EMA 1P & 5P trái chiều (trung tính)","#475569"))
 
-    # ─────────────────────────────
-    # 4. MACD Histogram + Slope (15 điểm)
-    # ─────────────────────────────
     if macd_h1 > 0 and macd_sl1 > 0:
         score += 15; detail.append((15,"MACD Hist+ & dốc lên → Momentum tăng","#00e676"))
     elif macd_h1 < 0 and macd_sl1 < 0:
@@ -658,9 +520,6 @@ def compute_confluence(df1: pd.DataFrame, df5: pd.DataFrame) -> dict:
     elif macd_h1 < 0:
         score -= 6;  detail.append((6,"MACD Hist âm (slope phẳng)","#f97316"))
 
-    # ─────────────────────────────
-    # 5. RSI zone (10 điểm)
-    # ─────────────────────────────
     if 40 <= rsi1 <= 60:
         detail.append((0,f"RSI={rsi1:.1f} trung tính","#475569"))
     elif rsi1 < 30:
@@ -672,9 +531,6 @@ def compute_confluence(df1: pd.DataFrame, df5: pd.DataFrame) -> dict:
     elif rsi1 > 55:
         score += 5;  detail.append((5,f"RSI={rsi1:.1f} hơi mạnh","#38bdf8"))
 
-    # ─────────────────────────────
-    # 6. RSI Divergence (20 điểm)
-    # ─────────────────────────────
     div1 = detect_rsi_divergence(df1)
     div5 = detect_rsi_divergence(df5)
     if div1["bull"] or div5["bull"]:
@@ -682,9 +538,6 @@ def compute_confluence(df1: pd.DataFrame, df5: pd.DataFrame) -> dict:
     elif div1["bear"] or div5["bear"]:
         score -= 20; detail.append((20,"RSI Divergence GIẢM → Sắp đảo chiều xuống","#ff5252"))
 
-    # ─────────────────────────────
-    # 7. Volume Accumulation (10 điểm)
-    # ─────────────────────────────
     va = analyze_volume_accumulation(df1)
     if va["bias"] == "BULL":
         score += 10; detail.append((10,f"Volume Tích Lũy: {va['desc']}","#00e676"))
@@ -693,9 +546,6 @@ def compute_confluence(df1: pd.DataFrame, df5: pd.DataFrame) -> dict:
     else:
         detail.append((0,f"Volume Cân Bằng: {va['desc']}","#475569"))
 
-    # ─────────────────────────────
-    # 8. VWAP position (10 điểm)
-    # ─────────────────────────────
     if vwap1 > 0:
         if close1 > vwap1 * 1.001:
             score += 10; detail.append((10,f"Giá ({close1:.1f}) > VWAP ({vwap1:.1f}) → BULL","#00e676"))
@@ -704,17 +554,11 @@ def compute_confluence(df1: pd.DataFrame, df5: pd.DataFrame) -> dict:
         else:
             detail.append((0,f"Giá ≈ VWAP ({vwap1:.1f}) → Trung tính","#475569"))
 
-    # ─────────────────────────────
-    # 9. BB Breakout (20 điểm)
-    # ─────────────────────────────
     if close1 > bb_up1:
         score += 20; detail.append((20,"Phá BB Trên + Vol spike → Breakout UP","#00e676"))
     elif close1 < bb_lo1:
         score -= 20; detail.append((20,"Phá BB Dưới + Vol spike → Breakdown","#ff5252"))
 
-    # ─────────────────────────────
-    # 10. Candle Patterns (15 điểm)
-    # ─────────────────────────────
     patterns = detect_candle_patterns(df1)
     pat_score = 0
     for p in patterns:
@@ -727,10 +571,8 @@ def compute_confluence(df1: pd.DataFrame, df5: pd.DataFrame) -> dict:
         score += max(pat_score, -15)
         detail.append((abs(max(pat_score,-15)), f"Mẫu nến: {', '.join(p['name'] for p in patterns if p['bias']=='BEAR')}", "#ff5252"))
 
-    # Clamp [-100, 100]
     score = max(-100, min(100, score))
 
-    # Khuyến nghị
     if score >= 70:
         rec = "LONG MẠNH"; rec_css = "rec-strong-long"; rec_color = "#00e676"
         rec_desc = "Xác suất cao thị trường tăng mạnh trong 3–5 phiên tới. Ưu tiên vào LONG, pullback về EMA21."
@@ -753,19 +595,13 @@ def compute_confluence(df1: pd.DataFrame, df5: pd.DataFrame) -> dict:
         "patterns": patterns, "div1": div1, "div5": div5, "va": va,
     }
 
-
-# ══════════════════════════════════════════════════════════════
-# DỰ BÁO VÀI PHIÊN TỚI
-# ══════════════════════════════════════════════════════════════
 def compute_forecast(df1: pd.DataFrame, df5: pd.DataFrame) -> dict:
-    """5 yếu tố dự báo trung hạn → xác suất tăng/giảm mạnh."""
     factors = []
 
     def safe(df, col, default=0):
         v = df.iloc[-1].get(col, default)
         return default if (v is None or (isinstance(v,float) and np.isnan(v))) else float(v)
 
-    # ── Yếu tố 1: ADX đang tăng (momentum hình thành) ──
     adx_now  = safe(df5,"adx",20)
     adx_prev = float(df5["adx"].iloc[-6]) if len(df5)>6 and not np.isnan(df5["adx"].iloc[-6]) else adx_now
     adx_rising = adx_now > adx_prev + 2
@@ -776,7 +612,6 @@ def compute_forecast(df1: pd.DataFrame, df5: pd.DataFrame) -> dict:
     else:
         factors.append({"label":"ADX Phẳng/Giảm","desc":"Xu hướng chưa tăng tốc","bias":"NEUTRAL","weight":0})
 
-    # ── Yếu tố 2: RSI Divergence ──
     div = detect_rsi_divergence(df5, lookback=40)
     if div["bull"]:
         factors.append({"label":"RSI Divergence Tăng","desc":div["desc"],"bias":"UP","weight":25})
@@ -785,7 +620,6 @@ def compute_forecast(df1: pd.DataFrame, df5: pd.DataFrame) -> dict:
     else:
         factors.append({"label":"Không có RSI Divergence","desc":"Không phát hiện phân kỳ","bias":"NEUTRAL","weight":0})
 
-    # ── Yếu tố 3: BB Squeeze + EMA ──
     bb_w = safe(df5,"bb_width",0.03)
     hist_bw = df5["bb_width"].dropna().tail(60)
     is_sqz  = len(hist_bw)>15 and bb_w < hist_bw.quantile(0.15)
@@ -796,7 +630,6 @@ def compute_forecast(df1: pd.DataFrame, df5: pd.DataFrame) -> dict:
     else:
         factors.append({"label":"Không có BB Squeeze","desc":"Biên độ bình thường","bias":"NEUTRAL","weight":0})
 
-    # ── Yếu tố 4: Volume Accumulation 5P ──
     va = analyze_volume_accumulation(df5, window=15)
     if va["bias"] == "BULL":
         factors.append({"label":"Volume Tích Lũy Mua","desc":va["desc"],"bias":"UP","weight":15})
@@ -805,7 +638,6 @@ def compute_forecast(df1: pd.DataFrame, df5: pd.DataFrame) -> dict:
     else:
         factors.append({"label":"Volume Cân Bằng","desc":va["desc"],"bias":"NEUTRAL","weight":0})
 
-    # ── Yếu tố 5: MACD Slope 5P ──
     mh_now  = safe(df5,"macd_hist"); mh_slope = safe(df5,"macd_slope")
     if mh_slope > 0.05:
         bias = "UP"
@@ -815,7 +647,6 @@ def compute_forecast(df1: pd.DataFrame, df5: pd.DataFrame) -> dict:
     else:
         factors.append({"label":"MACD Slope Phẳng","desc":"Momentum chưa rõ hướng","bias":"NEUTRAL","weight":0})
 
-    # Tổng hợp
     up_score   = sum(f["weight"] for f in factors if f["bias"]=="UP")
     down_score = sum(f["weight"] for f in factors if f["bias"]=="DOWN")
     total      = up_score + down_score + 1e-9
@@ -842,10 +673,6 @@ def compute_forecast(df1: pd.DataFrame, df5: pd.DataFrame) -> dict:
             "up_prob": up_prob, "down_prob": down_prob,
             "verdict": verdict, "verdict_color": verdict_color, "verdict_desc": verdict_desc}
 
-
-# ══════════════════════════════════════════════════════════════
-# WIN RATE ANALYTICS – Đầy đủ theo Regime, Hướng, Tín hiệu
-# ══════════════════════════════════════════════════════════════
 def compute_winrate() -> dict:
     closed = [t for t in st.session_state.trade_history if t["status"] == "CLOSED"]
     if not closed:
@@ -865,7 +692,6 @@ def compute_winrate() -> dict:
     profit_factor = gross_profit / gross_loss
     expectancy    = (win_rate / 100 * avg_win) + ((1 - win_rate / 100) * avg_loss)
 
-    # ── Phân tích theo Regime ──
     by_regime = {}
     for t in closed:
         r = t.get("regime", "Không rõ") or "Không rõ"
@@ -878,7 +704,6 @@ def compute_winrate() -> dict:
     for r in by_regime:
         by_regime[r]["wr"] = by_regime[r]["wins"] / by_regime[r]["total"] * 100
 
-    # ── Phân tích theo Hướng lệnh ──
     by_direction = {}
     for t in closed:
         d = t.get("direction", "?")
@@ -891,7 +716,6 @@ def compute_winrate() -> dict:
     for d in by_direction:
         by_direction[d]["wr"] = by_direction[d]["wins"] / by_direction[d]["total"] * 100
 
-    # ── Phân tích theo Nguồn tín hiệu (score range) ──
     by_signal = {}
     for t in closed:
         sc = t.get("score", 0)
@@ -907,21 +731,18 @@ def compute_winrate() -> dict:
     for b in by_signal:
         by_signal[b]["wr"] = by_signal[b]["wins"] / by_signal[b]["total"] * 100
 
-    # ── Equity Curve ──
     sorted_closed = sorted(closed, key=lambda x: x.get("exit_time", "00:00:00"))
     running = 0.0; equity_curve = []
     for t in sorted_closed:
         running += t.get("pnl_points", 0)
         equity_curve.append({"label": f"#{t['id']}", "eq": running})
 
-    # ── Max Drawdown ──
     peak = 0.0; max_dd = 0.0
     for pt in equity_curve:
         if pt["eq"] > peak: peak = pt["eq"]
         dd = peak - pt["eq"]
         if dd > max_dd: max_dd = dd
 
-    # ── Chuỗi thua liên tiếp ──
     max_consec = cur_consec = 0
     for t in sorted_closed:
         if t.get("pnl_points", 0) <= 0:
@@ -939,20 +760,12 @@ def compute_winrate() -> dict:
         "consecutive_losses": max_consec,
     }
 
-
-# ══════════════════════════════════════════════════════════════
-# ALERT ENGINE – Score ≥ |70| → ghi log + hiển thị banner
-# ══════════════════════════════════════════════════════════════
-ALERT_THRESHOLD = 70
-
-def push_alert(score: int, confluence: dict, forecast: dict, price: float, regime: str):
-    """Ghi cảnh báo vào alert_history khi |score| >= threshold."""
-    if abs(score) < ALERT_THRESHOLD:
+def push_alert(score: int, confluence: dict, forecast: dict, price: float, regime: str, threshold: int):
+    if abs(score) < threshold:
         return
-    # Chỉ push khi score mới "vượt ngưỡng" hoặc đổi hướng
     prev = st.session_state.alert_last_score
-    if abs(prev) >= ALERT_THRESHOLD and (score > 0) == (prev > 0):
-        return  # cùng hướng, đã alert rồi
+    if abs(prev) >= threshold and (score > 0) == (prev > 0):
+        return  
     st.session_state.alert_last_score = score
     direction = "LONG" if score > 0 else "SHORT"
     st.session_state.alert_history.insert(0, {
@@ -969,10 +782,8 @@ def push_alert(score: int, confluence: dict, forecast: dict, price: float, regim
     })
     st.session_state.alert_history = st.session_state.alert_history[:100]
 
-
-def render_alert_banner(score: int, confluence: dict, price: float, muted: bool):
-    """Hiển thị banner cảnh báo nổi bật ở đầu trang."""
-    if abs(score) < ALERT_THRESHOLD:
+def render_alert_banner(score: int, confluence: dict, price: float, muted: bool, threshold: int):
+    if abs(score) < threshold:
         return
     if muted:
         st.markdown(f"""
@@ -985,11 +796,9 @@ def render_alert_banner(score: int, confluence: dict, price: float, muted: bool)
     css       = "alert-long" if is_long else "alert-short"
     color     = "#00e676"   if is_long else "#ff5252"
     icon      = "🚀"        if is_long else "💥"
-    direction = "LONG"      if is_long else "SHORT"
     rec       = confluence["rec"]
     rec_desc  = confluence["rec_desc"]
 
-    # Các yếu tố kích hoạt (detail dương nếu long, âm nếu short)
     top_factors = sorted(confluence["detail"],
                          key=lambda x: x[0] * (1 if is_long else -1), reverse=True)[:3]
     factors_html = " &nbsp;·&nbsp; ".join(
@@ -1019,7 +828,6 @@ def render_alert_banner(score: int, confluence: dict, price: float, muted: bool)
 
 
 def render_alert_history():
-    """Bảng lịch sử cảnh báo."""
     hist = st.session_state.alert_history
     if not hist:
         st.markdown('<div style="color:#334155;font-family:JetBrains Mono;font-size:11px;padding:8px">Chưa có cảnh báo nào. Score cần ≥ |70| để kích hoạt.</div>', unsafe_allow_html=True)
@@ -1046,6 +854,7 @@ def render_alert_history():
             <span>▲{a.get('up_prob',0):.0f}% ▼{a.get('dn_prob',0):.0f}%</span>
           </div>
         </div>""", unsafe_allow_html=True)
+
 def detect_regime(df: pd.DataFrame) -> dict:
     last = df.iloc[-1]
     def g(col, d=0):
@@ -1064,7 +873,6 @@ def detect_regime(df: pd.DataFrame) -> dict:
             "is_sqz":is_sqz,"last_time":last_time,
             "close":float(last["close"]),"atr":g("atr",2)}
 
-
 # ══════════════════════════════════════════════════════════════
 # BIỂU ĐỒ
 # ══════════════════════════════════════════════════════════════
@@ -1076,20 +884,17 @@ def build_chart(df, title, show_ema, show_bb, show_signals, show_trades,
     fig = make_subplots(rows=4, cols=1, shared_xaxes=True,
                         row_heights=[0.52,0.14,0.17,0.17], vertical_spacing=0.008)
 
-    # Candles
     fig.add_trace(go.Candlestick(x=df.index, open=df["open"], high=df["high"],
         low=df["low"], close=df["close"],
         increasing_line_color="#00e676", decreasing_line_color="#ff5252",
         increasing_fillcolor="#00e676",  decreasing_fillcolor="#ff5252",
         line_width=1, name="OHLC"), row=1, col=1)
 
-    # ── VWAP + Bands ──
     if show_vwap and "vwap" in df.columns:
         fig.add_trace(go.Scatter(x=df.index, y=df["vwap"],
             line=dict(color="#f59e0b", width=1.8, dash="dash"), name="VWAP"), row=1, col=1)
 
         if show_vwap_bands:
-            # +2σ / -2σ (vùng extreme)
             fig.add_trace(go.Scatter(x=df.index, y=df["vwap_u2"],
                 line=dict(color="#f97316", width=0.9, dash="dot"),
                 name="VWAP +2σ", showlegend=True), row=1, col=1)
@@ -1097,7 +902,6 @@ def build_chart(df, title, show_ema, show_bb, show_signals, show_trades,
                 line=dict(color="#38bdf8", width=0.9, dash="dot"),
                 fill="tonexty", fillcolor="rgba(249,115,22,0.04)",
                 name="VWAP -2σ", showlegend=True), row=1, col=1)
-            # +1σ / -1σ (vùng bình thường)
             fig.add_trace(go.Scatter(x=df.index, y=df["vwap_u1"],
                 line=dict(color="#f97316", width=0.6, dash="longdash"),
                 name="VWAP +1σ", showlegend=False), row=1, col=1)
@@ -1105,7 +909,6 @@ def build_chart(df, title, show_ema, show_bb, show_signals, show_trades,
                 line=dict(color="#38bdf8", width=0.6, dash="longdash"),
                 name="VWAP -1σ", showlegend=False), row=1, col=1)
 
-        # VWAP cross signals
         if show_signals:
             for col_v, sym_v, color_v, lbl_v in [
                 ("vwap_buy",  "triangle-up",  "#f59e0b", "VWAP MUA"),
@@ -1120,13 +923,9 @@ def build_chart(df, title, show_ema, show_bb, show_signals, show_trades,
                                         line=dict(color=BG, width=1)),
                             name=lbl_v), row=1, col=1)
 
-    # ── Pattern annotations trực tiếp trên chart ──
     if show_patterns and pattern_history:
-        # Lọc trong khoảng thời gian hiển thị
         df_times = set(df.index)
         pats_in_view = [p for p in pattern_history if p["time"] in df_times]
-
-        # Nhóm theo bias để vẽ 1 trace/nhóm (tăng hiệu năng)
         for bias_f, sym_f, color_f, leg_f in [
             ("BULL",    "triangle-up",   "#00c853", "Mẫu TĂNG"),
             ("BEAR",    "triangle-down", "#d50000", "Mẫu GIẢM"),
@@ -1134,15 +933,13 @@ def build_chart(df, title, show_ema, show_bb, show_signals, show_trades,
         ]:
             grp = [p for p in pats_in_view if p["bias"] == bias_f]
             if not grp: continue
-
-            # Marker scatter
             fig.add_trace(go.Scatter(
                 x    = [p["time"]    for p in grp],
                 y    = [p["chart_y"] for p in grp],
                 mode = "markers+text",
                 marker=dict(symbol=sym_f, size=13, color=color_f,
                             line=dict(color=BG, width=1.5)),
-                text     = [p["name"][:4] for p in grp],   # tên ngắn gọn
+                text     = [p["name"][:4] for p in grp],   
                 textposition = "bottom center" if bias_f=="BULL" else "top center",
                 textfont = dict(size=8, color=color_f),
                 hovertext= [f"<b>{p['name']}</b><br>{p['desc']}<br>"
@@ -1154,7 +951,6 @@ def build_chart(df, title, show_ema, show_bb, show_signals, show_trades,
                 name     = leg_f,
             ), row=1, col=1)
 
-    # BB
     if show_bb:
         fig.add_trace(go.Scatter(x=df.index, y=df["bb_upper"],
             line=dict(color="#475569",width=1,dash="dot"), showlegend=False), row=1, col=1)
@@ -1164,13 +960,11 @@ def build_chart(df, title, show_ema, show_bb, show_signals, show_trades,
         fig.add_trace(go.Scatter(x=df.index, y=df["bb_mid"],
             line=dict(color="#334155",width=0.8), showlegend=False), row=1, col=1)
 
-    # EMA
     if show_ema:
         for col_, color_, lbl in [("ema9","#f59e0b","EMA9"),("ema21","#38bdf8","EMA21"),("ema50","#a78bfa","EMA50")]:
             fig.add_trace(go.Scatter(x=df.index, y=df[col_],
                 line=dict(color=color_, width=1.5), name=lbl), row=1, col=1)
 
-    # Signal markers
     if show_signals:
         for col_, sym, color_, lbl in [
             ("ema_buy","triangle-up","#00e676","EMA MUA"),
@@ -1186,7 +980,6 @@ def build_chart(df, title, show_ema, show_bb, show_signals, show_trades,
                 fig.add_trace(go.Scatter(x=sub_.index, y=y_, mode="markers",
                     marker=dict(symbol=sym, size=11, color=color_), name=lbl), row=1, col=1)
 
-    # TP/SL
     if show_trades:
         for t in st.session_state.trade_history:
             if t["status"]=="OPEN":
@@ -1198,19 +991,16 @@ def build_chart(df, title, show_ema, show_bb, show_signals, show_trades,
 
     score_color = "#00e676" if score>0 else "#ff5252"
 
-    # Volume
     vc = ["rgba(0,230,118,0.55)" if c>=o else "rgba(255,82,82,0.55)" for c,o in zip(df["close"],df["open"])]
     fig.add_trace(go.Bar(x=df.index, y=df["volume"], marker_color=vc, showlegend=False), row=2, col=1)
     fig.add_trace(go.Scatter(x=df.index, y=df["vol_ma"], line=dict(color="#ffd600",width=1.2), showlegend=False), row=2, col=1)
 
-    # MACD
     mc = ["#00e676" if v>=0 else "#ff5252" for v in df["macd_hist"]]
     fig.add_trace(go.Bar(x=df.index, y=df["macd_hist"], marker_color=mc, showlegend=False), row=3, col=1)
     fig.add_trace(go.Scatter(x=df.index, y=df["macd"], line=dict(color="#38bdf8",width=1.2), name="MACD"), row=3, col=1)
     fig.add_trace(go.Scatter(x=df.index, y=df["macd_signal"], line=dict(color="#ffd600",width=1.2), name="Signal"), row=3, col=1)
     fig.add_hline(y=0, line_color=GR, line_width=0.8, row=3, col=1)
 
-    # RSI + Stoch
     fig.add_trace(go.Scatter(x=df.index, y=df["rsi"], line=dict(color="#38bdf8",width=1.5), name="RSI"), row=4, col=1)
     fig.add_trace(go.Scatter(x=df.index, y=df["stoch_k"], line=dict(color="#a78bfa",width=1), name="%K"), row=4, col=1)
     for lvl, col_ in [(70,"#ff5252"),(30,"#00e676"),(50,GR)]:
@@ -1229,7 +1019,6 @@ def build_chart(df, title, show_ema, show_bb, show_signals, show_trades,
     fig.update_yaxes(row=4,col=1,range=[0,100])
     return fig
 
-
 # ══════════════════════════════════════════════════════════════
 # TRADE MANAGEMENT
 # ══════════════════════════════════════════════════════════════
@@ -1245,7 +1034,6 @@ def add_trade(direction, entry, tp1, tp2, tp3, sl, size,
         "tp1": tp1, "tp2": tp2, "tp3": tp3, "sl": sl, "size": size,
         "status":     "OPEN",
         "exit_price": 0.0, "pnl_points": 0.0, "pnl": 0.0, "reason": "-",
-        # ── Tag mới ──
         "score":      score,
         "regime":     regime,
         "signal_tag": signal_tag,
@@ -1269,10 +1057,6 @@ def auto_check_trades(cp, target_tp):
                 if cp <= tp_val: close_trade(i, tp_val, f"🎯 Chạm {target_tp.upper()}")
                 elif cp >= t["sl"]: close_trade(i, t["sl"], "🛡️ Cắt lỗ SL")
 
-
-# ══════════════════════════════════════════════════════════════
-# SIGNAL HISTORY
-# ══════════════════════════════════════════════════════════════
 def get_signal_history(df, tf_label):
     history = []
     for i in range(1, min(len(df), 150)):
@@ -1291,14 +1075,8 @@ def get_signal_history(df, tf_label):
 # ██ SIDEBAR
 # ══════════════════════════════════════════════════════════════
 with st.sidebar:
-    st.markdown('<div style="font-family:JetBrains Mono;font-size:16px;font-weight:700;color:#38bdf8;padding:6px 0 14px">⚡ VN30F TERMINAL PRO MAX v3</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-family:JetBrains Mono;font-size:16px;font-weight:700;color:#38bdf8;padding:6px 0 14px">⚡ VN30F TERMINAL v4</div>', unsafe_allow_html=True)
     symbol = st.selectbox("Hợp đồng", ["VN30F1M","VN30F1Q","VN30F2Q"], index=0)
-
-    if "VN30F1M" in symbol:
-        _exp = get_vn30f1m_expiry_info()
-        _ec = "#ff5252" if _exp["days_to"]<=3 else ("#ffd600" if _exp["days_to"]<=7 else "#38bdf8")
-        st.markdown(f'<div style="background:#0c1020;border:1px solid #1a2540;border-left:3px solid {_ec};border-radius:6px;padding:8px;margin-bottom:10px;font-family:JetBrains Mono;font-size:10px;"><div style="color:{_ec};font-weight:700">📅 {_exp["contract_name"]}</div><div style="color:#64748b;margin-top:2px">Đáo hạn: <b style="color:{_ec}">{_exp["next_expiry"].strftime("%d/%m/%Y")}</b> (Còn {_exp["days_to"]}d)</div></div>', unsafe_allow_html=True)
-
     auto_refresh = st.toggle("🔄 Tự động cập nhật", value=True)
     refresh_sec  = st.slider("Chu kỳ (giây)", 10, 120, 30) if auto_refresh else 30
 
@@ -1311,32 +1089,67 @@ with st.sidebar:
     show_vwap_bands = st.toggle("VWAP Bands (±1σ / ±2σ)", value=True)
     show_patterns   = st.toggle("🕯️ Mẫu nến trên chart", value=True)
 
-    st.markdown('<div class="sec-hdr" style="margin-top:14px">🤖 BOT TỰ TÍNH RỦI RO</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sec-hdr" style="margin-top:14px">🤖 QUẢN LÝ RỦI RO</div>', unsafe_allow_html=True)
     lot_size  = st.number_input("Số hợp đồng", min_value=1, max_value=50, value=1)
     auto_sltp = st.toggle("Bot tự tính SL/TP theo ATR", value=True)
     if not auto_sltp:
-        tp1_points, tp2_points, tp3_points = st.number_input("TP1", value=4.0), st.number_input("TP2", value=8.0), st.number_input("TP3", value=12.0)
-        sl_points  = st.number_input("SL", value=4.0)
+        tp1_points = st.number_input("TP1 (điểm)", min_value=1.0, max_value=50.0, value=4.0, step=0.5)
+        tp2_points = st.number_input("TP2 (điểm)", min_value=1.0, max_value=50.0, value=8.0, step=0.5)
+        tp3_points = st.number_input("TP3 (điểm)", min_value=1.0, max_value=50.0, value=12.0,step=0.5)
+        sl_points  = st.number_input("SL  (điểm)", min_value=1.0, max_value=30.0, value=4.0, step=0.5)
+    auto_tp_target = st.selectbox("Bot đóng lệnh tại", ["tp1","tp2","tp3"], index=2)
 
-    auto_tp_target = st.selectbox("Bot đóng lệnh tại", ["TP1","TP2","TP3"], index=2)
-    
     st.markdown("---")
+    st.markdown('<div class="sec-hdr">🔔 CÀI ĐẶT CẢNH BÁO</div>', unsafe_allow_html=True)
     alert_threshold = st.slider("Ngưỡng Score Alert", 50, 90, 70, step=5)
     mute_alerts = st.toggle("🔕 Tắt banner cảnh báo", value=False)
-    if st.button("🗑️ Xóa lịch sử lệnh", use_container_width=True): st.session_state.trade_history = []; st.rerun()
+    if st.button("🗑️ Xóa lịch sử cảnh báo", use_container_width=True): st.session_state.alert_history = []; st.session_state.alert_last_score = 0; st.rerun()
+    st.markdown("---")
+    if st.button("🗑️ Xóa toàn bộ lịch sử lệnh", use_container_width=True): st.session_state.trade_history = []; st.rerun()
+    
+    # [ĐÃ FIX LỖI]: Khởi tạo các tabs trước khi gọi with sb_tab1 để tránh lỗi NameError
+    sb_tab1, sb_tab2, sb_tab3 = st.tabs(["Cơ bản", "Biểu đồ", "Bot"])
 
     # ──────────────────────────────────────────────────────
+    # TAB 1 – CƠ BẢN & CẢNH BÁO
+    # ──────────────────────────────────────────────────────
+    with sb_tab1:
+        # [ĐÃ FIX LỖI]: Thêm key="..." để tránh lỗi DuplicateWidgetID do trùng với phần khai báo trên cùng
+        symbol_tab1 = st.selectbox("Hợp đồng", ["VN30F1M","VN30F1Q","VN30F2Q"], index=0, key="sym_tab1")
+
+        if "VN30F1M" in symbol_tab1:
+            _exp = get_vn30f1m_expiry_info()
+            _ec = "#ff5252" if _exp["days_to"]<=3 else ("#ffd600" if _exp["days_to"]<=7 else "#38bdf8")
+            st.markdown(f'<div style="background:#0c1020;border:1px solid #1a2540;border-left:3px solid {_ec};border-radius:6px;padding:8px;margin-bottom:10px;font-family:JetBrains Mono;font-size:10px;"><div style="color:{_ec};font-weight:700">📅 {_exp["contract_name"]}</div><div style="color:#64748b;margin-top:2px">Đáo hạn: <b style="color:{_ec}">{_exp["next_expiry"].strftime("%d/%m/%Y")}</b> (Còn {_exp["days_to"]}d)</div></div>', unsafe_allow_html=True)
+
+        auto_refresh_tab1 = st.toggle("🔄 Tự động cập nhật", value=True, key="ar_tab1")
+        refresh_sec_tab1  = st.slider("Chu kỳ (giây)", 10, 120, 30, key="rs_tab1") if auto_refresh_tab1 else 30
+
+        st.markdown("---")
+        st.markdown('<div class="sec-hdr">🔔 CÀI ĐẶT CẢNH BÁO</div>', unsafe_allow_html=True)
+        alert_threshold_tab1 = st.slider("Ngưỡng Score Alert", 50, 90, 70, step=5, key="at_tab1")
+        mute_alerts_tab1 = st.toggle("🔕 Tắt banner cảnh báo", value=False, key="ma_tab1")
+        
+        if st.button("🗑️ Xóa lịch sử cảnh báo", use_container_width=True, key="clear_alerts_tab1"): 
+            st.session_state.alert_history = []
+            st.session_state.alert_last_score = 0
+            st.rerun()
+            
+        if st.button("🗑️ Xóa toàn bộ lịch sử lệnh", use_container_width=True, key="clear_trades_tab1"): 
+            st.session_state.trade_history = []
+            st.rerun()
+
     # TAB 2 – BIỂU ĐỒ
     # ──────────────────────────────────────────────────────
     with sb_tab2:
         st.markdown('<div class="sec-hdr" style="margin-top:6px">📊 BIỂU ĐỒ</div>', unsafe_allow_html=True)
-        show_ema        = st.toggle("EMA 9/21/50",             value=True)
-        show_bb         = st.toggle("Bollinger Bands",         value=True)
-        show_signals    = st.toggle("Mũi tên tín hiệu",       value=True)
-        show_trades     = st.toggle("Đường Entry/TP/SL",       value=True)
-        show_vwap       = st.toggle("VWAP",                    value=True)
-        show_vwap_bands = st.toggle("VWAP Bands (±1σ / ±2σ)", value=True)
-        show_patterns   = st.toggle("🕯️ Mẫu nến trên chart",  value=True)
+        show_ema        = st.toggle("EMA 9/21/50",             value=True, key="ema_tab2")
+        show_bb         = st.toggle("Bollinger Bands",         value=True, key="bb_tab2")
+        show_signals    = st.toggle("Mũi tên tín hiệu",       value=True, key="sig_tab2")
+        show_trades     = st.toggle("Đường Entry/TP/SL",       value=True, key="trades_tab2")
+        show_vwap       = st.toggle("VWAP",                    value=True, key="vwap_tab2")
+        show_vwap_bands = st.toggle("VWAP Bands (±1σ / ±2σ)", value=True, key="vwap_b_tab2")
+        show_patterns   = st.toggle("🕯️ Mẫu nến trên chart",  value=True, key="pat_tab2")
 
         st.markdown('<div class="sec-hdr" style="margin-top:14px">🎨 CHỦ ĐỀ CHART</div>', unsafe_allow_html=True)
         chart_style = st.selectbox("Màu nến", ["Xanh/Đỏ chuẩn", "Xanh/Trắng", "Xanh lá/Hồng"], index=0)
@@ -1355,18 +1168,19 @@ with st.sidebar:
     # ──────────────────────────────────────────────────────
     with sb_tab3:
         st.markdown('<div class="sec-hdr" style="margin-top:6px">🤖 BOT TỰ TÍNH RỦI RO</div>', unsafe_allow_html=True)
-        lot_size  = st.number_input("Số hợp đồng", min_value=1, max_value=50, value=1)
-        auto_sltp = st.toggle("Bot tự tính SL/TP theo ATR", value=True)
-        if not auto_sltp:
+        lot_size_tab3  = st.number_input("Số hợp đồng", min_value=1, max_value=50, value=1, key="ls_tab3")
+        auto_sltp_tab3 = st.toggle("Bot tự tính SL/TP theo ATR", value=True, key="asltp_tab3")
+        
+        if not auto_sltp_tab3:
             st.markdown('<div class="sec-hdr" style="margin-top:10px">NHẬP THỦ CÔNG</div>', unsafe_allow_html=True)
-            tp1_points = st.number_input("TP1 (điểm)", min_value=1.0, max_value=50.0, value=4.0, step=0.5)
-            tp2_points = st.number_input("TP2 (điểm)", min_value=1.0, max_value=50.0, value=8.0, step=0.5)
-            tp3_points = st.number_input("TP3 (điểm)", min_value=1.0, max_value=50.0, value=12.0,step=0.5)
-            sl_points  = st.number_input("SL  (điểm)", min_value=1.0, max_value=30.0, value=4.0, step=0.5)
+            tp1_points_t3 = st.number_input("TP1 (điểm)", min_value=1.0, max_value=50.0, value=4.0, step=0.5, key="tp1_t3")
+            tp2_points_t3 = st.number_input("TP2 (điểm)", min_value=1.0, max_value=50.0, value=8.0, step=0.5, key="tp2_t3")
+            tp3_points_t3 = st.number_input("TP3 (điểm)", min_value=1.0, max_value=50.0, value=12.0,step=0.5, key="tp3_t3")
+            sl_points_t3  = st.number_input("SL  (điểm)", min_value=1.0, max_value=30.0, value=4.0, step=0.5, key="sl_t3")
         else:
-            tp1_points, tp2_points, tp3_points, sl_points = 4.0, 8.0, 12.0, 4.0
+            tp1_points_t3, tp2_points_t3, tp3_points_t3, sl_points_t3 = 4.0, 8.0, 12.0, 4.0
 
-        auto_tp_target = st.selectbox("Bot đóng lệnh tại", ["TP1","TP2","TP3"], index=2)
+        auto_tp_target_tab3 = st.selectbox("Bot đóng lệnh tại", ["TP1","TP2","TP3"], index=2, key="atpt_tab3")
 
         st.markdown('<div class="sec-hdr" style="margin-top:14px">⚡ NGƯỠNG VÀO LỆNH TỰ ĐỘNG</div>', unsafe_allow_html=True)
         auto_entry_score = st.slider("Score tối thiểu để vào lệnh", 40, 90, 70, step=5,
@@ -1419,15 +1233,13 @@ with st.sidebar:
         if st.button("🗑️ Xóa lịch sử lệnh", use_container_width=True, key="clear_trades_bot"):
             st.session_state.trade_history = []; st.rerun()
 
-
 # ══════════════════════════════════════════════════════════════
-# LOAD DATA  – thông minh theo vòng đời hợp đồng & giờ giao dịch
+# LOAD DATA
 # ══════════════════════════════════════════════════════════════
 _expiry_info = get_vn30f1m_expiry_info() if "VN30F1M" in symbol else None
 _db1 = smart_days_back(symbol, 1)
 _db5 = smart_days_back(symbol, 5)
 
-# Thông báo nếu hợp đồng mới (ít ngày)
 _new_contract_warn = ""
 if _expiry_info and _expiry_info["days_since"] <= 3:
     _new_contract_warn = (
@@ -1437,23 +1249,20 @@ if _expiry_info and _expiry_info["days_since"] <= 3:
     )
 
 with st.spinner("Đang tải dữ liệu VN30F1M..."):
-    # Giải nén tuple thành df và biến chứa nguồn dữ liệu (src)
-    df1_raw, src1 = fetch_data(symbol, 1, days_back=_db1)
-    df5_raw, src5 = fetch_data(symbol, 5, days_back=_db5)
+    df1_raw = fetch_data(symbol, 1, days_back=_db1)
+    df5_raw = fetch_data(symbol, 5, days_back=_db5)
 
-    # Nếu df thiếu bars (do hợp đồng mới), kéo thêm dữ liệu
     MIN_BARS_1 = 50
     MIN_BARS_5 = 80
     if len(df1_raw) < MIN_BARS_1 and _db1 < 31:
-        df1_raw, src1 = fetch_data_extended(symbol, 1, days_back=min(_db1 * 3, 31))
+        df1_raw = fetch_data_extended(symbol, 1, days_back=min(_db1 * 3, 31))
     if len(df5_raw) < MIN_BARS_5 and _db5 < 31:
-        df5_raw, src5 = fetch_data_extended(symbol, 5, days_back=min(_db5 * 3, 31))
+        df5_raw = fetch_data_extended(symbol, 5, days_back=min(_db5 * 3, 31))
 
-# Không bao giờ dừng – nếu API lỗi, fetch_data đã tự fallback sang mô phỏng
 is_simulated = df1_raw.attrs.get("_simulated", False) or df5_raw.attrs.get("_simulated", False)
 if df1_raw.empty or df5_raw.empty:
-    df1_raw = _simulate(1,  n=350, seed=hash(symbol + "1") % 9999)
-    df5_raw = _simulate(5,  n=350, seed=hash(symbol + "5") % 9999)
+    df1_raw = _simulate(1,  n=350, seed=abs(hash(symbol + "1")) % 9999)
+    df5_raw = _simulate(5,  n=350, seed=abs(hash(symbol + "5")) % 9999)
     is_simulated = True
 
 if _new_contract_warn:
@@ -1464,7 +1273,6 @@ if is_simulated:
         "🖥️ **Đang dùng dữ liệu MÔ PHỎNG** — không lấy được dữ liệu thực. "
         "Kiểm tra kết nối mạng hoặc đảm bảo đã cài đúng bản `vnstock==0.2.8.2`"
     )
-    # Debug: xem lỗi cụ thể từ vnstock bản cũ
     with st.expander("🔍 Xem chi tiết lỗi vnstock (debug)"):
         _exp_info2 = get_vn30f1m_expiry_info()
         _sym_test  = _exp_info2["exact_symbol"]
@@ -1499,20 +1307,15 @@ current_atr   = regime5["atr"]
 
 auto_check_trades(current_price, auto_tp_target.lower())
 
-# Tính confluence + forecast
 confluence = compute_confluence(df1, df5)
 forecast   = compute_forecast(df1, df5)
 score      = confluence["score"]
 
-# ── Ghi cảnh báo nếu score vượt ngưỡng ──
-ALERT_THRESHOLD = alert_threshold
-push_alert(score, confluence, forecast, current_price, regime5["regime"])
+push_alert(score, confluence, forecast, current_price, regime5["regime"], alert_threshold)
 
-# ── Scan mẫu nến lịch sử cho chart (cache theo seed/symbol) ──
 pat_hist1 = scan_pattern_history(df1, lookback=120)
 pat_hist5 = scan_pattern_history(df5, lookback=120)
 
-# ── VWAP deviation hiện tại ──
 vwap_dev  = float(df1["vwap_dev_pct"].iloc[-1]) if "vwap_dev_pct" in df1.columns and not np.isnan(df1["vwap_dev_pct"].iloc[-1]) else 0.0
 vwap_now  = float(df1["vwap"].iloc[-1])         if "vwap" in df1.columns and not np.isnan(df1["vwap"].iloc[-1]) else 0.0
 
@@ -1556,9 +1359,9 @@ h7.markdown(f'<div class="metric-box"><div class="metric-label">Dự báo 3-5 ph
 st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════
-# ██ ALERT BANNER – hiện khi |score| ≥ ngưỡng
+# ██ ALERT BANNER
 # ══════════════════════════════════════════════════════════════
-render_alert_banner(score, confluence, current_price, mute_alerts)
+render_alert_banner(score, confluence, current_price, mute_alerts, alert_threshold)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -1569,7 +1372,6 @@ st.markdown('<div class="sec-hdr">🤖 KHUYẾN NGHỊ HỆ THỐNG</div>', unsa
 rec_col, score_col = st.columns([2.5, 1.5])
 
 with rec_col:
-    # Score progress bar
     bar_pct  = abs(score)
     bar_color= "#00e676" if score>0 else "#ff5252"
     bar_left = max(0, -score) / 100 * 100
@@ -1590,7 +1392,6 @@ with rec_col:
       </div>
     </div>""", unsafe_allow_html=True)
 
-    # Candle patterns
     pats = confluence["patterns"]
     if pats:
         st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
@@ -1635,7 +1436,6 @@ with st.expander(f"📡 DỰ BÁO 3–5 PHIÊN TỚI  ·  {forecast['verdict']} 
 
     with f2_col:
         fc = forecast
-        # Probability bars
         st.markdown(f"""
         <div style="background:#0f1626;border:1px solid #1a2540;border-radius:8px;padding:14px;font-family:'JetBrains Mono',monospace">
           <div style="color:#38bdf8;font-size:11px;font-weight:700;margin-bottom:10px">XÁC SUẤT DỰ BÁO</div>
@@ -1656,7 +1456,6 @@ with st.expander(f"📡 DỰ BÁO 3–5 PHIÊN TỚI  ·  {forecast['verdict']} 
           <div style="font-size:10px;color:#475569;text-align:center;margin-top:4px">{fc['verdict_desc']}</div>
         </div>""", unsafe_allow_html=True)
 
-        # RSI Divergence summary
         div1 = confluence["div1"]; div5 = confluence["div5"]
         if div1["bull"] or div5["bull"] or div1["bear"] or div5["bear"]:
             div_color = "#00e676" if (div1["bull"] or div5["bull"]) else "#ff5252"
@@ -1709,13 +1508,9 @@ with chart_col:
             pattern_history=pat_hist5,
         ), use_container_width=True, config={"displayModeBar": False})
 
-    # ──────────────────────────────────────────────
-    # TAB MẪU NẾN – đầy đủ với quality + context
-    # ──────────────────────────────────────────────
     with tab_pat:
         st.markdown('<div class="sec-hdr">🕯️ MẪU NẾN PHÁT HIỆN HIỆN TẠI & LỊCH SỬ</div>', unsafe_allow_html=True)
 
-        # ── Mẫu nến nến cuối cùng (1P + 5P) ──
         cur_pats1 = detect_candle_patterns(df1)
         cur_pats5 = detect_candle_patterns(df5)
         all_cur   = [(p,"1P") for p in cur_pats1] + [(p,"5P") for p in cur_pats5]
@@ -1745,7 +1540,6 @@ with chart_col:
 
         st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
-        # ── Bảng giải thích 17 mẫu ──
         with st.expander("📖 Bảng tra cứu 17 mẫu nến & độ tin cậy"):
             pattern_info = [
                 ("Morning Star",        "BULL","82%","Đảo chiều tăng mạnh – 3 nến: đỏ lớn → nhỏ → xanh lớn"),
@@ -1780,7 +1574,6 @@ with chart_col:
 
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
-        # ── Lịch sử mẫu nến 120 nến gần nhất ──
         st.markdown('<div class="sec-hdr">LỊCH SỬ MẪU NẾN (120 nến gần nhất)</div>', unsafe_allow_html=True)
 
         fp1, fp2, fp3 = st.columns(3)
@@ -1798,7 +1591,6 @@ with chart_col:
             and (filter_ql_p  == "Tất cả" or p["quality"] == filter_ql_p)
         ]
 
-        # Stats
         n_bull_h = sum(1 for p,_ in filtered_p if p["bias"]=="BULL")
         n_bear_h = sum(1 for p,_ in filtered_p if p["bias"]=="BEAR")
         n_a_h    = sum(1 for p,_ in filtered_p if p["quality"]=="A")
@@ -1847,9 +1639,6 @@ with chart_col:
         else:
             st.info("Chưa có tín hiệu giao cắt gần đây.")
 
-    # ──────────────────────────────────────────────
-    # WIN RATE TAB – đầy đủ breakdown
-    # ──────────────────────────────────────────────
     with tab_wr:
         st.markdown('<div class="sec-hdr">📊 WIN RATE & HIỆU SUẤT TOÀN DIỆN</div>', unsafe_allow_html=True)
         wr = compute_winrate()
@@ -1857,7 +1646,6 @@ with chart_col:
         if wr["total"] == 0:
             st.info("Chưa có lệnh đóng. Hãy vào lệnh và để hệ thống tự chốt lời/cắt lỗ.")
         else:
-            # ── 4 chỉ số chính ──
             w1, w2, w3, w4 = st.columns(4)
             wrc = "#00e676" if wr["win_rate"] >= 55 else ("#ffd600" if wr["win_rate"] >= 45 else "#ff5252")
             w1.markdown(f'<div class="metric-box"><div class="metric-label">Win Rate</div><div class="metric-value" style="color:{wrc}">{wr["win_rate"]:.1f}%</div><div style="font-size:10px;color:#475569">✅{wr["wins"]} / ❌{wr["losses"]}</div></div>', unsafe_allow_html=True)
@@ -1870,7 +1658,6 @@ with chart_col:
 
             st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
-            # ── Equity curve ──
             if wr["equity_curve"]:
                 eq_df  = pd.DataFrame(wr["equity_curve"])
                 eq_col = ["#00e676" if v >= 0 else "#ff5252" for v in eq_df["eq"]]
@@ -1895,7 +1682,6 @@ with chart_col:
                 )
                 st.plotly_chart(fig_eq, use_container_width=True, config={"displayModeBar": False})
 
-            # ── Breakdown theo Regime, Hướng, Score ──
             col_r, col_d, col_s = st.columns(3)
 
             def breakdown_table(title, data: dict):
@@ -1937,7 +1723,6 @@ with chart_col:
 
             st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
-            # ── Thống kê bổ sung ──
             dd_c  = "#ff5252" if wr["max_drawdown"] > 5 else ("#ffd600" if wr["max_drawdown"] > 2 else "#00e676")
             cl_c  = "#ff5252" if wr["consecutive_losses"] >= 4 else ("#ffd600" if wr["consecutive_losses"] >= 2 else "#00e676")
             health = "✅ Chiến lược đang hoạt động tốt." if wr["expectancy"] > 0 and wr["profit_factor"] > 1.2 else "⚠️ Cần xem xét lại SL/TP hoặc lọc điều kiện vào lệnh."
@@ -1953,7 +1738,6 @@ with chart_col:
               <div style="color:#64748b;margin-top:8px">{health}</div>
             </div>""", unsafe_allow_html=True)
 
-            # ── Bảng lệnh đóng ──
             st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
             st.markdown('<div class="sec-hdr">LỊCH SỬ LỆNH ĐÃ ĐÓNG</div>', unsafe_allow_html=True)
             closed_trades = [t for t in st.session_state.trade_history if t["status"] == "CLOSED"]
@@ -1972,14 +1756,10 @@ with chart_col:
                 } for t in closed_trades]
                 st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
-    # ──────────────────────────────────────────────
-    # ALERT HISTORY TAB
-    # ──────────────────────────────────────────────
     with tab_alert:
         n_alerts = len(st.session_state.alert_history)
         st.markdown(f'<div class="sec-hdr">🚨 LỊCH SỬ CẢNH BÁO  ·  {n_alerts} cảnh báo  ·  Ngưỡng: |Score| ≥ {alert_threshold}</div>', unsafe_allow_html=True)
 
-        # Stats
         long_alerts  = sum(1 for a in st.session_state.alert_history if a["direction"] == "LONG")
         short_alerts = sum(1 for a in st.session_state.alert_history if a["direction"] == "SHORT")
         st.markdown(f"""
@@ -1991,7 +1771,6 @@ with chart_col:
 
         render_alert_history()
 
-        # Hướng dẫn
         st.markdown(f"""
         <div style="background:#0f1626;border:1px solid #1a2540;border-radius:8px;padding:12px;margin-top:12px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#475569">
           <b style="color:#38bdf8">💡 Cách sử dụng cảnh báo:</b><br>
@@ -2005,7 +1784,6 @@ with chart_col:
 with trade_col:
     st.markdown('<div class="sec-hdr">🔫 VÀO LỆNH & QUẢN LÝ</div>', unsafe_allow_html=True)
 
-    # Cảnh báo rủi ro
     if auto_sltp:
         calc_sl  = current_atr * 1.0
         calc_tp1 = current_atr * 1.0
@@ -2019,7 +1797,6 @@ with trade_col:
     risk_lvl = "CAO" if risk_amt>=2_000_000 else ("TRUNG BÌNH" if risk_amt>=500_000 else "THẤP")
     risk_c   = "#ff5252" if risk_lvl=="CAO" else ("#ffd600" if risk_lvl=="TRUNG BÌNH" else "#00e676")
 
-    # Cảnh báo nghịch chiều
     against_score = (score >= 40 and "SHORT" in confluence["rec"]) or (score <= -40 and "LONG" in confluence["rec"])
     warn_html = ""
     if score >= 70:
@@ -2063,7 +1840,6 @@ with trade_col:
                 add_trade("SHORT", entry_price, entry_price-tp1_points, entry_price-tp2_points, entry_price-tp3_points, entry_price+sl_points, lot_size, score, regime5["regime"], sig_tag)
             st.rerun()
 
-    # Open trades
     st.markdown('<div style="font-size:11px;color:#94a3b8;font-family:JetBrains Mono;margin:12px 0 6px;font-weight:700">📋 LỆNH ĐANG MỞ</div>', unsafe_allow_html=True)
     open_exist = False
     for i, t in enumerate(st.session_state.trade_history):
@@ -2127,7 +1903,6 @@ with st.expander("📐 BẢNG TIÊU CHÍ XU HƯỚNG & TÍNH TOÁN THỰC TẾ (
 st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
 fl, fr = st.columns([4,1])
 
-# Xác định nguồn dữ liệu thực tế (không phải biến is_simulated đã khai báo ở trên)
 _src_label = "🖥️ Mô phỏng" if is_simulated else "📡 API Thực (vnstock)"
 _hrs_label  = " · ● Đang GD" if is_trading_hours() else " · ○ Ngoài giờ"
 _bars_label = f" · {len(df1_raw)}b/1m · {len(df5_raw)}b/5m"
