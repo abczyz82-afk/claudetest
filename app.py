@@ -175,6 +175,9 @@ def is_trading_hours() -> bool:
     return (dtime(9, 0) <= t <= dtime(11, 30)) or (dtime(13, 0) <= t <= dtime(14, 45))
 
 
+# ══════════════════════════════════════════════════════════════
+# DATA FETCHING (DÙNG VNSTOCK 0.2.8.2)
+# ══════════════════════════════════════════════════════════════
 @st.cache_data(ttl=30, show_spinner=False)
 def fetch_data(symbol: str, tf_minutes: int, days_back: int = 7) -> pd.DataFrame:
     end_date   = (datetime.now(VN_TZ) + timedelta(days=1)).strftime("%Y-%m-%d")
@@ -209,105 +212,6 @@ def fetch_data(symbol: str, tf_minutes: int, days_back: int = 7) -> pd.DataFrame
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_data_extended(symbol: str, tf_minutes: int, days_back: int) -> pd.DataFrame:
     return fetch_data(symbol, tf_minutes, days_back)
-
-    # 3. MÔ PHỎNG (Nếu cả 2 API đều sập)
-    return _simulate(tf_minutes, n=350, seed=hash(symbol + str(tf_minutes)) % 9999), source_used
-
-    def _clean(df: pd.DataFrame) -> pd.DataFrame:
-        """Chuẩn hóa cột và index."""
-        df = df.rename(columns={c: c.lower() for c in df.columns})
-        if "time" not in df.columns:
-            df["time"] = pd.to_datetime(df.index)
-        else:
-            df["time"] = pd.to_datetime(df["time"])
-        df = df.sort_values("time").set_index("time")
-        cols = [c for c in ["open","high","low","close","volume"] if c in df.columns]
-        df = df[cols].dropna(how="all")
-        return df
-
-    # ── vnstock3 ──
-    for sym in symbols_to_try:
-        try:
-            from vnstock3 import Vnstock
-            for src in ["TCBS", "SSI", "VCI"]: # Đổi ưu tiên source ở đây
-                try:
-                    vn  = Vnstock().stock(symbol=sym, source=src)
-                    df  = vn.quote.history(start=start_date, end=end_date, interval=f"{tf_minutes}m")
-                    if df is not None and not df.empty:
-                        df = _clean(df)
-                        if not df.empty and len(df) > 5:
-                            return df, f"Vnstock3 ({src})"
-                except Exception:
-                    continue
-        except Exception:
-            pass
-
-    # ── vnstock3 – thử Derivatives API riêng ──
-    for sym in symbols_to_try:
-        try:
-            from vnstock3 import Vnstock
-            vn  = Vnstock().derivatives(symbol=sym, source="VCI")
-            df  = vn.quote.history(start=start_date, end=end_date, interval=f"{tf_minutes}m")
-            if df is not None and not df.empty:
-                df = _clean(df)
-                if not df.empty and len(df) > 5:
-                    return df
-        except Exception:
-            pass
-
-    # ── vnstock 0.2.x ──
-    for sym in symbols_to_try:
-        try:
-            from vnstock import stock_historical_data
-            for dtype in ["derivative", "stock"]:
-                try:
-                    df = stock_historical_data(
-                        symbol=sym, start_date=start_date, end_date=end_date,
-                        resolution=str(tf_minutes), type=dtype
-                    )
-                    if df is not None and not df.empty:
-                        df = _clean(df)
-                        if not df.empty and len(df) > 5:
-                            return df
-                except Exception:
-                    continue
-        except Exception:
-            pass
-
-    # ── Fallback mô phỏng ──
-    return _simulate(tf_minutes, n=350, seed=hash(symbol + str(tf_minutes)) % 9999)
-
-
-@st.cache_data(ttl=300, show_spinner=False)
-def fetch_data_extended(symbol: str, tf_minutes: int, days_back: int) -> pd.DataFrame:
-    """
-    Phiên bản extended: thử fetch với days_back lớn hơn khi thiếu dữ liệu.
-    Cache TTL = 5 phút (ít thay đổi hơn).
-    """
-    return fetch_data(symbol, tf_minutes, days_back)
-
-
-def _simulate(tf_minutes: int, n: int = 350, seed: int = 42) -> pd.DataFrame:
-    np.random.seed(seed)
-    now   = datetime.now(VN_TZ).replace(second=0, microsecond=0)
-    now  -= timedelta(minutes=now.minute % tf_minutes)
-    times = [now - timedelta(minutes=tf_minutes * i) for i in range(n)][::-1]
-    p = [1280.0]
-    for i in range(1, n):
-        phase = (i // 50) % 3
-        drift = 0.18 if phase == 0 else (-0.15 if phase == 2 else 0.0)
-        vol   = 0.30 if phase == 1 else 0.62
-        p.append(max(p[-1] + drift + np.random.normal(0, vol), 100))
-    noise = np.abs(np.random.normal(0, 0.3, n)) + 0.1
-    df = pd.DataFrame({"time": times, "close": p})
-    df["open"]   = df["close"].shift(1).fillna(df["close"].iloc[0])
-    df["high"]   = df[["open","close"]].max(axis=1) + noise
-    df["low"]    = df[["open","close"]].min(axis=1) - noise
-    df["volume"] = np.random.randint(200, 3500, n)
-    df = df.set_index("time")
-    df.attrs["_simulated"] = True   # đánh dấu để phân biệt
-    return df
-
 
 # ══════════════════════════════════════════════════════════════
 # CHỈ BÁO KỸ THUẬT
