@@ -1106,26 +1106,31 @@ with st.sidebar:
     if st.button("🗑️ Xóa lịch sử cảnh báo", use_container_width=True): st.session_state.alert_history = []; st.session_state.alert_last_score = 0; st.rerun()
     st.markdown("---")
     if st.button("🗑️ Xóa toàn bộ lịch sử lệnh", use_container_width=True): st.session_state.trade_history = []; st.rerun()
+    
+    # [ĐÃ FIX LỖI]: Khởi tạo các tabs trước khi gọi with sb_tab1 để tránh lỗi NameError
+    sb_tab1, sb_tab2, sb_tab3 = st.tabs(["Cơ bản", "Biểu đồ", "Bot"])
+
     # ──────────────────────────────────────────────────────
     # TAB 1 – CƠ BẢN & CẢNH BÁO
     # ──────────────────────────────────────────────────────
     with sb_tab1:
-        symbol = st.selectbox("Hợp đồng", ["VN30F1M","VN30F1Q","VN30F2Q"], index=0)
+        # [ĐÃ FIX LỖI]: Thêm key="..." để tránh lỗi DuplicateWidgetID do trùng với phần khai báo trên cùng
+        symbol_tab1 = st.selectbox("Hợp đồng", ["VN30F1M","VN30F1Q","VN30F2Q"], index=0, key="sym_tab1")
 
-        if "VN30F1M" in symbol:
+        if "VN30F1M" in symbol_tab1:
             _exp = get_vn30f1m_expiry_info()
             _ec = "#ff5252" if _exp["days_to"]<=3 else ("#ffd600" if _exp["days_to"]<=7 else "#38bdf8")
             st.markdown(f'<div style="background:#0c1020;border:1px solid #1a2540;border-left:3px solid {_ec};border-radius:6px;padding:8px;margin-bottom:10px;font-family:JetBrains Mono;font-size:10px;"><div style="color:{_ec};font-weight:700">📅 {_exp["contract_name"]}</div><div style="color:#64748b;margin-top:2px">Đáo hạn: <b style="color:{_ec}">{_exp["next_expiry"].strftime("%d/%m/%Y")}</b> (Còn {_exp["days_to"]}d)</div></div>', unsafe_allow_html=True)
 
-        auto_refresh = st.toggle("🔄 Tự động cập nhật", value=True)
-        refresh_sec  = st.slider("Chu kỳ (giây)", 10, 120, 30) if auto_refresh else 30
+        auto_refresh_tab1 = st.toggle("🔄 Tự động cập nhật", value=True, key="ar_tab1")
+        refresh_sec_tab1  = st.slider("Chu kỳ (giây)", 10, 120, 30, key="rs_tab1") if auto_refresh_tab1 else 30
 
         st.markdown("---")
         st.markdown('<div class="sec-hdr">🔔 CÀI ĐẶT CẢNH BÁO</div>', unsafe_allow_html=True)
-        alert_threshold = st.slider("Ngưỡng Score Alert", 50, 90, 70, step=5)
-        mute_alerts = st.toggle("🔕 Tắt banner cảnh báo", value=False)
+        alert_threshold_tab1 = st.slider("Ngưỡng Score Alert", 50, 90, 70, step=5, key="at_tab1")
+        mute_alerts_tab1 = st.toggle("🔕 Tắt banner cảnh báo", value=False, key="ma_tab1")
         
-        if st.button("🗑️ Xóa lịch sử cảnh báo", use_container_width=True): 
+        if st.button("🗑️ Xóa lịch sử cảnh báo", use_container_width=True, key="clear_alerts_tab1"): 
             st.session_state.alert_history = []
             st.session_state.alert_last_score = 0
             st.rerun()
@@ -1138,13 +1143,13 @@ with st.sidebar:
     # ──────────────────────────────────────────────────────
     with sb_tab2:
         st.markdown('<div class="sec-hdr" style="margin-top:6px">📊 BIỂU ĐỒ</div>', unsafe_allow_html=True)
-        show_ema        = st.toggle("EMA 9/21/50",             value=True)
-        show_bb         = st.toggle("Bollinger Bands",         value=True)
-        show_signals    = st.toggle("Mũi tên tín hiệu",       value=True)
-        show_trades     = st.toggle("Đường Entry/TP/SL",       value=True)
-        show_vwap       = st.toggle("VWAP",                    value=True)
-        show_vwap_bands = st.toggle("VWAP Bands (±1σ / ±2σ)", value=True)
-        show_patterns   = st.toggle("🕯️ Mẫu nến trên chart",  value=True)
+        show_ema        = st.toggle("EMA 9/21/50",             value=True, key="ema_tab2")
+        show_bb         = st.toggle("Bollinger Bands",         value=True, key="bb_tab2")
+        show_signals    = st.toggle("Mũi tên tín hiệu",       value=True, key="sig_tab2")
+        show_trades     = st.toggle("Đường Entry/TP/SL",       value=True, key="trades_tab2")
+        show_vwap       = st.toggle("VWAP",                    value=True, key="vwap_tab2")
+        show_vwap_bands = st.toggle("VWAP Bands (±1σ / ±2σ)", value=True, key="vwap_b_tab2")
+        show_patterns   = st.toggle("🕯️ Mẫu nến trên chart",  value=True, key="pat_tab2")
 
         st.markdown('<div class="sec-hdr" style="margin-top:14px">🎨 CHỦ ĐỀ CHART</div>', unsafe_allow_html=True)
         chart_style = st.selectbox("Màu nến", ["Xanh/Đỏ chuẩn", "Xanh/Trắng", "Xanh lá/Hồng"], index=0)
@@ -1163,19 +1168,19 @@ with st.sidebar:
     # ──────────────────────────────────────────────────────
     with sb_tab3:
         st.markdown('<div class="sec-hdr" style="margin-top:6px">🤖 BOT TỰ TÍNH RỦI RO</div>', unsafe_allow_html=True)
-        lot_size  = st.number_input("Số hợp đồng", min_value=1, max_value=50, value=1)
-        auto_sltp = st.toggle("Bot tự tính SL/TP theo ATR", value=True)
+        lot_size_tab3  = st.number_input("Số hợp đồng", min_value=1, max_value=50, value=1, key="ls_tab3")
+        auto_sltp_tab3 = st.toggle("Bot tự tính SL/TP theo ATR", value=True, key="asltp_tab3")
         
-        if not auto_sltp:
+        if not auto_sltp_tab3:
             st.markdown('<div class="sec-hdr" style="margin-top:10px">NHẬP THỦ CÔNG</div>', unsafe_allow_html=True)
-            tp1_points = st.number_input("TP1 (điểm)", min_value=1.0, max_value=50.0, value=4.0, step=0.5)
-            tp2_points = st.number_input("TP2 (điểm)", min_value=1.0, max_value=50.0, value=8.0, step=0.5)
-            tp3_points = st.number_input("TP3 (điểm)", min_value=1.0, max_value=50.0, value=12.0,step=0.5)
-            sl_points  = st.number_input("SL  (điểm)", min_value=1.0, max_value=30.0, value=4.0, step=0.5)
+            tp1_points_t3 = st.number_input("TP1 (điểm)", min_value=1.0, max_value=50.0, value=4.0, step=0.5, key="tp1_t3")
+            tp2_points_t3 = st.number_input("TP2 (điểm)", min_value=1.0, max_value=50.0, value=8.0, step=0.5, key="tp2_t3")
+            tp3_points_t3 = st.number_input("TP3 (điểm)", min_value=1.0, max_value=50.0, value=12.0,step=0.5, key="tp3_t3")
+            sl_points_t3  = st.number_input("SL  (điểm)", min_value=1.0, max_value=30.0, value=4.0, step=0.5, key="sl_t3")
         else:
-            tp1_points, tp2_points, tp3_points, sl_points = 4.0, 8.0, 12.0, 4.0
+            tp1_points_t3, tp2_points_t3, tp3_points_t3, sl_points_t3 = 4.0, 8.0, 12.0, 4.0
 
-        auto_tp_target = st.selectbox("Bot đóng lệnh tại", ["TP1","TP2","TP3"], index=2)
+        auto_tp_target_tab3 = st.selectbox("Bot đóng lệnh tại", ["TP1","TP2","TP3"], index=2, key="atpt_tab3")
 
         st.markdown('<div class="sec-hdr" style="margin-top:14px">⚡ NGƯỠNG VÀO LỆNH TỰ ĐỘNG</div>', unsafe_allow_html=True)
         auto_entry_score = st.slider("Score tối thiểu để vào lệnh", 40, 90, 70, step=5,
@@ -1227,7 +1232,6 @@ with st.sidebar:
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
         if st.button("🗑️ Xóa lịch sử lệnh", use_container_width=True, key="clear_trades_bot"):
             st.session_state.trade_history = []; st.rerun()
-
 
 # ══════════════════════════════════════════════════════════════
 # LOAD DATA
