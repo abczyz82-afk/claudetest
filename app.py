@@ -1563,10 +1563,41 @@ with st.spinner("Đang tải dữ liệu VN30F1M..."):
 # Không bao giờ dừng – nếu API lỗi, fetch_data đã tự fallback sang mô phỏng
 is_simulated = df1_raw.attrs.get("_simulated", False) or df5_raw.attrs.get("_simulated", False)
 if df1_raw.empty or df5_raw.empty:
-    # Trường hợp cực kỳ hiếm: cả 3 nguồn đều lỗi → tạo dữ liệu mô phỏng tại chỗ
     df1_raw = _simulate(1,  n=350, seed=hash(symbol + "1") % 9999)
     df5_raw = _simulate(5,  n=350, seed=hash(symbol + "5") % 9999)
     is_simulated = True
+
+if _new_contract_warn:
+    st.warning(_new_contract_warn)
+
+if is_simulated:
+    st.warning(
+        "🖥️ **Đang dùng dữ liệu MÔ PHỎNG** — không lấy được dữ liệu thực. "
+        "Kiểm tra kết nối mạng hoặc đảm bảo đã cài đúng bản `vnstock==0.2.8.2`"
+    )
+    # Debug: xem lỗi cụ thể từ vnstock bản cũ
+    with st.expander("🔍 Xem chi tiết lỗi vnstock (debug)"):
+        _exp_info2 = get_vn30f1m_expiry_info()
+        _sym_test  = _exp_info2["exact_symbol"]
+        _start_t   = (datetime.now(VN_TZ) - timedelta(days=5)).strftime("%Y-%m-%d")
+        _end_t     = (datetime.now(VN_TZ) + timedelta(days=1)).strftime("%Y-%m-%d")
+        st.code(f"Symbol thử: {_sym_test}  |  start={_start_t}  end={_end_t}  | res=5", language="text")
+
+        try:
+            from vnstock import stock_historical_data
+            st.success("✅ import vnstock OK")
+            _df2 = stock_historical_data(
+                symbol=_sym_test, start_date=_start_t, end_date=_end_t,
+                resolution="5", type="derivative"
+            )
+            if _df2 is not None and not _df2.empty:
+                st.success(f"✅ Lấy dữ liệu thành công: {len(_df2)} dòng")
+            else:
+                st.error("❌ vnstock trả về rỗng. Có thể do ngoài giờ GD hoặc lỗi server VCI.")
+        except ImportError as _e:
+            st.error(f"❌ Không import được vnstock: {_e}")
+        except Exception as _e:
+            st.error(f"❌ Lỗi khi lấy dữ liệu: {_e}")
 
 if _new_contract_warn:
     st.warning(_new_contract_warn)
