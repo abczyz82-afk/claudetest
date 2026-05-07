@@ -12,7 +12,7 @@ VN_TZ = pytz.timezone('Asia/Ho_Chi_Minh')
 # PAGE CONFIG
 # ══════════════════════════════════════════════════════════════
 st.set_page_config(
-    page_title="VN30F Terminal PRO v3",
+    page_title="VN30F Terminal PRO MAX v3",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -48,6 +48,29 @@ section[data-testid="stSidebar"] *{color:#c0ccdf!important;}
 .stButton>button:hover{background:linear-gradient(135deg,#1d4ed8,#3b82f6);}
 .stTabs [data-baseweb="tab"]{font-family:'JetBrains Mono',monospace;font-size:11px;color:#475569;}
 .stTabs [aria-selected="true"]{color:#38bdf8!important;border-bottom-color:#38bdf8!important;}
+
+/* Sidebar tab overrides – compact style */
+section[data-testid="stSidebar"] .stTabs [data-baseweb="tab-list"] {
+  gap:0px; background:#080c18; border-bottom:1px solid #1a2540; padding:0;
+}
+section[data-testid="stSidebar"] .stTabs [data-baseweb="tab"] {
+  font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:700;
+  padding:6px 8px; color:#334155!important; letter-spacing:0.5px;
+  border-radius:0; flex:1; justify-content:center;
+}
+section[data-testid="stSidebar"] .stTabs [aria-selected="true"] {
+  color:#38bdf8!important; border-bottom:2px solid #38bdf8!important;
+  background:#0c1020!important;
+}
+section[data-testid="stSidebar"] .stTabs [data-baseweb="tab-panel"] {
+  padding: 10px 0 0 0;
+}
+section[data-testid="stSidebar"] .stTabs { border:none; }
+/* Sidebar toggle labels */
+section[data-testid="stSidebar"] .stToggle label { font-size:11px!important; font-family:'JetBrains Mono',monospace!important; }
+section[data-testid="stSidebar"] .stSlider label, 
+section[data-testid="stSidebar"] .stNumberInput label,
+section[data-testid="stSidebar"] .stSelectbox label { font-size:11px!important; font-family:'JetBrains Mono',monospace!important; color:#64748b!important; }
 #MainMenu,footer,header{visibility:hidden;}
 .block-container{padding-top:0.8rem;padding-bottom:0.5rem;}
 .stSelectbox>div>div,.stNumberInput>div>div>input{background:#0f1626;border-color:#1a2540;color:#dde4f0;}
@@ -1469,66 +1492,160 @@ def get_signal_history(df, tf_label):
 # ██ SIDEBAR
 # ══════════════════════════════════════════════════════════════
 with st.sidebar:
-    st.markdown('<div style="font-family:JetBrains Mono;font-size:16px;font-weight:700;color:#38bdf8;padding:6px 0 14px">⚡ VN30F TERMINAL v3</div>', unsafe_allow_html=True)
+    # ══════════════════════════════════════════════════════
+    # HEADER – PRO MAX v3
+    # ══════════════════════════════════════════════════════
+    st.markdown("""
+    <div style="font-family:'JetBrains Mono',monospace;padding:8px 0 12px;border-bottom:1px solid #1a2540;margin-bottom:12px">
+      <div style="font-size:11px;color:#475569;letter-spacing:2px;text-transform:uppercase;margin-bottom:2px">⚡</div>
+      <div style="font-size:15px;font-weight:800;color:#38bdf8;letter-spacing:0.5px">VN30F TERMINAL</div>
+      <div style="font-size:10px;font-weight:700;color:#a78bfa;letter-spacing:3px;text-transform:uppercase">PRO MAX v3</div>
+    </div>""", unsafe_allow_html=True)
 
-    st.markdown('<div class="sec-hdr">⚙️ CÀI ĐẶT</div>', unsafe_allow_html=True)
-    symbol       = st.selectbox("Hợp đồng", ["VN30F1M","VN30F1Q","VN30F2Q"], index=0)
+    # ══════════════════════════════════════════════════════
+    # SIDEBAR TABS – 3 tab navigation
+    # ══════════════════════════════════════════════════════
+    sb_tab1, sb_tab2, sb_tab3 = st.tabs(["⚙️ Cài đặt", "📊 Biểu đồ", "🤖 Bot"])
 
-    # ── Thông tin đáo hạn VN30F1M ──
-    if "VN30F1M" in symbol:
-        _exp = get_vn30f1m_expiry_info()
-        _days_to = _exp["days_to"]
-        _days_since = _exp["days_since"]
-        _exp_color = "#ff5252" if _days_to <= 3 else ("#ffd600" if _days_to <= 7 else "#38bdf8")
-        _in_hours  = is_trading_hours()
-        _hours_txt = '<span style="color:#00e676">● Đang giao dịch</span>' if _in_hours else '<span style="color:#475569">● Ngoài giờ GD</span>'
+    # ──────────────────────────────────────────────────────
+    # TAB 1 – CÀI ĐẶT CHUNG
+    # ──────────────────────────────────────────────────────
+    with sb_tab1:
+        st.markdown('<div class="sec-hdr" style="margin-top:6px">HỢP ĐỒNG</div>', unsafe_allow_html=True)
+        symbol = st.selectbox("Hợp đồng", ["VN30F1M","VN30F1Q","VN30F2Q"], index=0, label_visibility="collapsed")
+
+        # ── Thông tin đáo hạn VN30F1M ──
+        if "VN30F1M" in symbol:
+            _exp = get_vn30f1m_expiry_info()
+            _days_to = _exp["days_to"]
+            _days_since = _exp["days_since"]
+            _exp_color = "#ff5252" if _days_to <= 3 else ("#ffd600" if _days_to <= 7 else "#38bdf8")
+            _in_hours  = is_trading_hours()
+            _hours_txt = '<span style="color:#00e676">● Đang giao dịch</span>' if _in_hours else '<span style="color:#475569">● Ngoài giờ GD</span>'
+            st.markdown(f"""
+            <div style="background:#0c1020;border:1px solid #1a2540;border-left:3px solid {_exp_color};
+                        border-radius:6px;padding:8px 10px;margin:6px 0 10px;font-family:'JetBrains Mono',monospace;font-size:10px;">
+              <div style="color:{_exp_color};font-weight:700">📅 {_exp['contract_name']}</div>
+              <div style="color:#64748b;margin-top:2px">Bắt đầu: <b style="color:#c0ccdf">{_exp['last_expiry'].strftime('%d/%m/%Y')}</b> ({_days_since}d)</div>
+              <div style="color:#64748b">Đáo hạn: <b style="color:{_exp_color}">{_exp['next_expiry'].strftime('%d/%m/%Y')}</b> (còn {_days_to}d)</div>
+              <div style="margin-top:3px">{_hours_txt}</div>
+            </div>""", unsafe_allow_html=True)
+
+        st.markdown('<div class="sec-hdr" style="margin-top:10px">TỰ ĐỘNG CẬP NHẬT</div>', unsafe_allow_html=True)
+        auto_refresh = st.toggle("🔄 Tự động cập nhật", value=True)
+        refresh_sec  = st.slider("Chu kỳ (giây)", 10, 120, 30) if auto_refresh else 30
+
+        st.markdown('<div class="sec-hdr" style="margin-top:14px">🔔 CẢNH BÁO</div>', unsafe_allow_html=True)
+        alert_threshold = st.slider("Ngưỡng Score Alert", 50, 90, 70, step=5,
+                                    help="Khi |Score| ≥ ngưỡng này → hiện banner cảnh báo")
+        mute_alerts = st.toggle("🔕 Tắt banner cảnh báo", value=False)
+
+        st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            if st.button("🗑️ Xóa lịch sử lệnh", use_container_width=True):
+                st.session_state.trade_history = []; st.rerun()
+        with col_btn2:
+            if st.button("🗑️ Xóa cảnh báo", use_container_width=True):
+                st.session_state.alert_history    = []
+                st.session_state.alert_last_score = 0
+                st.rerun()
+
+        st.markdown('<div style="font-size:9px;color:#1e293b;font-family:JetBrains Mono;margin-top:8px">⚠️ Dùng API thực: pip install vnstock3</div>', unsafe_allow_html=True)
+
+    # ──────────────────────────────────────────────────────
+    # TAB 2 – BIỂU ĐỒ
+    # ──────────────────────────────────────────────────────
+    with sb_tab2:
+        st.markdown('<div class="sec-hdr" style="margin-top:6px">📊 BIỂU ĐỒ</div>', unsafe_allow_html=True)
+        show_ema        = st.toggle("EMA 9/21/50",             value=True)
+        show_bb         = st.toggle("Bollinger Bands",         value=True)
+        show_signals    = st.toggle("Mũi tên tín hiệu",       value=True)
+        show_trades     = st.toggle("Đường Entry/TP/SL",       value=True)
+        show_vwap       = st.toggle("VWAP",                    value=True)
+        show_vwap_bands = st.toggle("VWAP Bands (±1σ / ±2σ)", value=True)
+        show_patterns   = st.toggle("🕯️ Mẫu nến trên chart",  value=True)
+
+        st.markdown('<div class="sec-hdr" style="margin-top:14px">🎨 CHỦ ĐỀ CHART</div>', unsafe_allow_html=True)
+        chart_style = st.selectbox("Màu nến", ["Xanh/Đỏ chuẩn", "Xanh/Trắng", "Xanh lá/Hồng"], index=0)
+
+        st.markdown('<div class="sec-hdr" style="margin-top:14px">🔍 KHUNG THỜI GIAN MẶC ĐỊNH</div>', unsafe_allow_html=True)
+        default_tf = st.selectbox("Mở chart mặc định", ["1 Phút", "5 Phút"], index=0)
+
+        st.markdown('<div class="sec-hdr" style="margin-top:14px">📐 ĐƯỜNG CHỈ BÁO</div>', unsafe_allow_html=True)
+        show_ema200     = st.toggle("EMA 200",                 value=False)
+        show_macd_line  = st.toggle("MACD trên chart",         value=False)
+        show_support    = st.toggle("Vùng Support/Resistance", value=False)
+        show_fibo       = st.toggle("Fibonacci Retracement",   value=False)
+
+    # ──────────────────────────────────────────────────────
+    # TAB 3 – BOT TỰ ĐỘNG
+    # ──────────────────────────────────────────────────────
+    with sb_tab3:
+        st.markdown('<div class="sec-hdr" style="margin-top:6px">🤖 BOT TỰ TÍNH RỦI RO</div>', unsafe_allow_html=True)
+        lot_size  = st.number_input("Số hợp đồng", min_value=1, max_value=50, value=1)
+        auto_sltp = st.toggle("Bot tự tính SL/TP theo ATR", value=True)
+        if not auto_sltp:
+            st.markdown('<div class="sec-hdr" style="margin-top:10px">NHẬP THỦ CÔNG</div>', unsafe_allow_html=True)
+            tp1_points = st.number_input("TP1 (điểm)", min_value=1.0, max_value=50.0, value=4.0, step=0.5)
+            tp2_points = st.number_input("TP2 (điểm)", min_value=1.0, max_value=50.0, value=8.0, step=0.5)
+            tp3_points = st.number_input("TP3 (điểm)", min_value=1.0, max_value=50.0, value=12.0,step=0.5)
+            sl_points  = st.number_input("SL  (điểm)", min_value=1.0, max_value=30.0, value=4.0, step=0.5)
+        else:
+            tp1_points, tp2_points, tp3_points, sl_points = 4.0, 8.0, 12.0, 4.0
+
+        auto_tp_target = st.selectbox("Bot đóng lệnh tại", ["TP1","TP2","TP3"], index=2)
+
+        st.markdown('<div class="sec-hdr" style="margin-top:14px">⚡ NGƯỠNG VÀO LỆNH TỰ ĐỘNG</div>', unsafe_allow_html=True)
+        auto_entry_score = st.slider("Score tối thiểu để vào lệnh", 40, 90, 70, step=5,
+                                     help="Bot chỉ vào lệnh khi |Score| ≥ ngưỡng này")
+        auto_entry_enabled = st.toggle("Bật auto-entry (thực nghiệm)", value=False)
+        if auto_entry_enabled:
+            st.markdown(f"""
+            <div style="background:#141205;border:1px solid #ffd60044;border-left:3px solid #ffd600;
+                 border-radius:6px;padding:8px 10px;font-family:'JetBrains Mono',monospace;font-size:10px;margin-top:6px">
+              <span style="color:#ffd600;font-weight:700">⚠️ CHẾ ĐỘ THỰC NGHIỆM</span><br>
+              <span style="color:#64748b">Bot sẽ tự vào lệnh khi Score ≥ {auto_entry_score}. Dùng thận trọng.</span>
+            </div>""", unsafe_allow_html=True)
+
+        st.markdown('<div class="sec-hdr" style="margin-top:14px">🛡️ QUẢN LÝ VỐN</div>', unsafe_allow_html=True)
+        max_open_trades = st.number_input("Tối đa lệnh mở cùng lúc", min_value=1, max_value=10, value=3)
+        daily_loss_limit = st.number_input("Giới hạn lỗ/ngày (điểm)", min_value=5, max_value=200, value=50, step=5)
+        trailing_stop = st.toggle("Trailing Stop tự động", value=False)
+        if trailing_stop:
+            trail_atr_mult = st.slider("Hệ số ATR trailing", 1.0, 3.0, 1.5, step=0.5)
+
+        st.markdown('<div class="sec-hdr" style="margin-top:14px">📊 THỐNG KÊ PHIÊN</div>', unsafe_allow_html=True)
+        _open_cnt  = sum(1 for t in st.session_state.trade_history if t["status"] == "OPEN")
+        _closed_cnt= sum(1 for t in st.session_state.trade_history if t["status"] == "CLOSED")
+        _win_cnt   = sum(1 for t in st.session_state.trade_history if t["status"]=="CLOSED" and t.get("pnl_points",0) > 0)
+        _wr        = (_win_cnt / _closed_cnt * 100) if _closed_cnt > 0 else 0
+        _total_pnl = sum(t.get("pnl_points",0) for t in st.session_state.trade_history if t["status"]=="CLOSED")
+        _pnl_color = "#00e676" if _total_pnl >= 0 else "#ff5252"
         st.markdown(f"""
-        <div style="background:#0c1020;border:1px solid #1a2540;border-left:3px solid {_exp_color};
-                    border-radius:6px;padding:8px 10px;margin:6px 0 10px;font-family:'JetBrains Mono',monospace;font-size:10px;">
-          <div style="color:{_exp_color};font-weight:700">📅 {_exp['contract_name']}</div>
-          <div style="color:#64748b;margin-top:2px">Bắt đầu: <b style="color:#c0ccdf">{_exp['last_expiry'].strftime('%d/%m/%Y')}</b> ({_days_since}d)</div>
-          <div style="color:#64748b">Đáo hạn: <b style="color:{_exp_color}">{_exp['next_expiry'].strftime('%d/%m/%Y')}</b> (còn {_days_to}d)</div>
-          <div style="margin-top:3px">{_hours_txt}</div>
+        <div style="background:#0f1626;border:1px solid #1a2540;border-radius:8px;padding:10px 12px;
+             font-family:'JetBrains Mono',monospace;font-size:10px">
+          <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #1a2540">
+            <span style="color:#64748b">Lệnh đang mở</span>
+            <span style="color:#38bdf8;font-weight:700">{_open_cnt}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #1a2540">
+            <span style="color:#64748b">Đã đóng</span>
+            <span style="color:#c0ccdf;font-weight:700">{_closed_cnt}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #1a2540">
+            <span style="color:#64748b">Win Rate</span>
+            <span style="color:{'#00e676' if _wr>=50 else '#ff5252'};font-weight:700">{_wr:.0f}%</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:3px 0">
+            <span style="color:#64748b">P&L tổng</span>
+            <span style="color:{_pnl_color};font-weight:700">{_total_pnl:+.1f}đ</span>
+          </div>
         </div>""", unsafe_allow_html=True)
 
-    auto_refresh = st.toggle("🔄 Tự động cập nhật", value=True)
-    refresh_sec  = st.slider("Chu kỳ (giây)", 10, 120, 30) if auto_refresh else 30
-
-    st.markdown('<div class="sec-hdr" style="margin-top:14px">📊 BIỂU ĐỒ</div>', unsafe_allow_html=True)
-    show_ema        = st.toggle("EMA 9/21/50",             value=True)
-    show_bb         = st.toggle("Bollinger Bands",         value=True)
-    show_signals    = st.toggle("Mũi tên tín hiệu",       value=True)
-    show_trades     = st.toggle("Đường Entry/TP/SL",       value=True)
-    show_vwap       = st.toggle("VWAP",                    value=True)
-    show_vwap_bands = st.toggle("VWAP Bands (±1σ / ±2σ)", value=True)
-    show_patterns   = st.toggle("🕯️ Mẫu nến trên chart",  value=True)
-
-    st.markdown('<div class="sec-hdr" style="margin-top:14px">🤖 QUẢN LÝ RỦI RO</div>', unsafe_allow_html=True)
-    lot_size  = st.number_input("Số hợp đồng", min_value=1, max_value=50, value=1)
-    auto_sltp = st.toggle("Bot tự tính SL/TP theo ATR", value=True)
-    if not auto_sltp:
-        tp1_points = st.number_input("TP1 (điểm)", min_value=1.0, max_value=50.0, value=4.0, step=0.5)
-        tp2_points = st.number_input("TP2 (điểm)", min_value=1.0, max_value=50.0, value=8.0, step=0.5)
-        tp3_points = st.number_input("TP3 (điểm)", min_value=1.0, max_value=50.0, value=12.0,step=0.5)
-        sl_points  = st.number_input("SL  (điểm)", min_value=1.0, max_value=30.0, value=4.0, step=0.5)
-
-    auto_tp_target = st.selectbox("Bot đóng lệnh tại", ["TP1","TP2","TP3"], index=2)
-
-    st.markdown("---")
-    st.markdown('<div class="sec-hdr">🔔 CẢI ĐẶT CẢNH BÁO</div>', unsafe_allow_html=True)
-    alert_threshold = st.slider("Ngưỡng Score Alert", 50, 90, 70, step=5,
-                                help="Khi |Score| ≥ ngưỡng này → hiện banner cảnh báo")
-    mute_alerts = st.toggle("🔕 Tắt banner cảnh báo", value=False)
-    if st.button("🗑️ Xóa lịch sử cảnh báo", use_container_width=True):
-        st.session_state.alert_history    = []
-        st.session_state.alert_last_score = 0
-        st.rerun()
-
-    st.markdown("---")
-    if st.button("🗑️ Xóa toàn bộ lịch sử lệnh", use_container_width=True):
-        st.session_state.trade_history = []; st.rerun()
-
-    st.markdown('<div style="font-size:10px;color:#1a2540;font-family:JetBrains Mono;margin-top:6px">⚠️ Dùng API thực: cài vnstock3<br>pip install vnstock3</div>', unsafe_allow_html=True)
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+        if st.button("🗑️ Xóa lịch sử lệnh", use_container_width=True, key="clear_trades_bot"):
+            st.session_state.trade_history = []; st.rerun()
 
 
 # ══════════════════════════════════════════════════════════════
