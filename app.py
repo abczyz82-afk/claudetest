@@ -219,7 +219,25 @@ def fetch_data(symbol: str, tf_minutes: int, days_back: int = 7) -> pd.DataFrame
     for sym in symbols_to_try:
         try:
             from vnstock3 import Vnstock
-            vn  = Vnstock().stock(symbol=sym, source="VCI")
+            # Phái sinh dùng source DNSE hoặc VCI
+            for src in ["DNSE", "VCI"]:
+                try:
+                    vn  = Vnstock().stock(symbol=sym, source=src)
+                    df  = vn.quote.history(start=start_date, end=end_date, interval=f"{tf_minutes}m")
+                    if df is not None and not df.empty:
+                        df = _clean(df)
+                        if not df.empty and len(df) > 5:
+                            return df
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+    # ── vnstock3 – thử Derivatives API riêng ──
+    for sym in symbols_to_try:
+        try:
+            from vnstock3 import Vnstock
+            vn  = Vnstock().derivatives(symbol=sym, source="VCI")
             df  = vn.quote.history(start=start_date, end=end_date, interval=f"{tf_minutes}m")
             if df is not None and not df.empty:
                 df = _clean(df)
@@ -232,14 +250,18 @@ def fetch_data(symbol: str, tf_minutes: int, days_back: int = 7) -> pd.DataFrame
     for sym in symbols_to_try:
         try:
             from vnstock import stock_historical_data
-            df = stock_historical_data(
-                symbol=sym, start_date=start_date, end_date=end_date,
-                resolution=str(tf_minutes), type="derivative"
-            )
-            if df is not None and not df.empty:
-                df = _clean(df)
-                if not df.empty and len(df) > 5:
-                    return df
+            for dtype in ["derivative", "stock"]:
+                try:
+                    df = stock_historical_data(
+                        symbol=sym, start_date=start_date, end_date=end_date,
+                        resolution=str(tf_minutes), type=dtype
+                    )
+                    if df is not None and not df.empty:
+                        df = _clean(df)
+                        if not df.empty and len(df) > 5:
+                            return df
+                except Exception:
+                    continue
         except Exception:
             pass
 
@@ -1462,6 +1484,40 @@ if is_simulated:
         "🖥️ **Đang dùng dữ liệu MÔ PHỎNG** — không lấy được dữ liệu thực từ vnstock. "
         "Kiểm tra kết nối mạng hoặc cài `vnstock3`: `pip install vnstock3`"
     )
+    # Debug: hiện lỗi cụ thể để dễ fix
+    with st.expander("🔍 Xem chi tiết lỗi vnstock3 (debug)"):
+        _exp_info2 = get_vn30f1m_expiry_info()
+        _sym_test  = _exp_info2["exact_symbol"]
+        _start_t   = (datetime.now() - timedelta(days=5)).strftime("%Y-%m-%d")
+        _end_t     = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+        st.code(f"Symbol thử: {_sym_test}  |  start={_start_t}  end={_end_t}", language="text")
+
+        # Test vnstock3
+        try:
+            from vnstock3 import Vnstock
+            st.success("✅ import vnstock3 OK")
+            for _src in ["DNSE", "VCI"]:
+                try:
+                    _vn = Vnstock().stock(symbol=_sym_test, source=_src)
+                    _df = _vn.quote.history(start=_start_t, end=_end_t, interval="5m")
+                    if _df is not None and not _df.empty:
+                        st.success(f"✅ vnstock3 source={_src}: {len(_df)} dòng")
+                    else:
+                        st.error(f"❌ vnstock3 source={_src}: trả về rỗng")
+                except Exception as _e:
+                    st.error(f"❌ vnstock3 source={_src}: {_e}")
+            # Thử Derivatives
+            try:
+                _vn2 = Vnstock().derivatives(symbol=_sym_test, source="VCI")
+                _df2 = _vn2.quote.history(start=_start_t, end=_end_t, interval="5m")
+                if _df2 is not None and not _df2.empty:
+                    st.success(f"✅ vnstock3 derivatives: {len(_df2)} dòng")
+                else:
+                    st.error("❌ vnstock3 derivatives: trả về rỗng")
+            except Exception as _e:
+                st.error(f"❌ vnstock3 derivatives: {_e}")
+        except ImportError as _e:
+            st.error(f"❌ Không import được vnstock3: {_e}")
 
 df1 = add_indicators(df1_raw.copy())
 df5 = add_indicators(df5_raw.copy())
