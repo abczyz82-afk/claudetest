@@ -220,15 +220,14 @@ def fetch_data(symbol: str, tf_minutes: int, days_back: int = 7) -> pd.DataFrame
     for sym in symbols_to_try:
         try:
             from vnstock3 import Vnstock
-            # Phái sinh dùng source DNSE hoặc VCI
-            for src in ["DNSE", "VCI"]:
+            for src in ["TCBS", "SSI", "VCI"]: # Đổi ưu tiên source ở đây
                 try:
                     vn  = Vnstock().stock(symbol=sym, source=src)
                     df  = vn.quote.history(start=start_date, end=end_date, interval=f"{tf_minutes}m")
                     if df is not None and not df.empty:
                         df = _clean(df)
                         if not df.empty and len(df) > 5:
-                            return df
+                            return df, f"Vnstock3 ({src})"
                 except Exception:
                     continue
         except Exception:
