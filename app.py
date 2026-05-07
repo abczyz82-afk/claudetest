@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import time
 import calendar
 import pytz
-
+VN_TZ = pytz.timezone('Asia/Ho_Chi_Minh')
 # ══════════════════════════════════════════════════════════════
 # PAGE CONFIG
 # ══════════════════════════════════════════════════════════════
@@ -76,7 +76,7 @@ section[data-testid="stSidebar"] *{color:#c0ccdf!important;}
 # ══════════════════════════════════════════════════════════════
 for k, v in {
     "trade_history":    [],
-    "last_refresh":     datetime.now(),
+    "last_refresh":     datetime.now(VN_TZ),
     "signal_history":   [],
     "prev_sig_keys":    set(),
     "alert_history":    [],          # lịch sử cảnh báo score cao
@@ -112,7 +112,7 @@ def get_vn30f1m_expiry_info() -> dict:
       - contract_name: tên tháng hợp đồng (VD "VN30F2506")
       - exact_symbol : mã chính xác cho API (VD "VN30F2605")
     """
-    now = datetime.now()
+    now = datetime.now(VN_TZ)
 
     # Đáo hạn tháng hiện tại
     curr_exp = get_third_thursday(now.year, now.month)
@@ -175,7 +175,7 @@ def smart_days_back(symbol: str, tf_minutes: int) -> int:
 
 def is_trading_hours() -> bool:
     """Kiểm tra có đang trong giờ giao dịch HOSE không (giờ Việt Nam)."""
-    now = datetime.now()
+    now = datetime.now(VN_TZ)
     # HOSE: Thứ 2-6, 09:00–11:30 và 13:00–14:45
     if now.weekday() >= 5:        # Thứ 7, CN
         return False
@@ -193,8 +193,8 @@ def fetch_data(symbol: str, tf_minutes: int, days_back: int = 7) -> pd.DataFrame
       3. Fallback mô phỏng   – luôn có data, không bao giờ trả về rỗng
     Ngoài giờ giao dịch vẫn trả về dữ liệu lịch sử đã có.
     """
-    end_date   = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
-    start_date = (datetime.now() - timedelta(days=days_back + 2)).strftime("%Y-%m-%d")
+    end_date   = (datetime.now(VN_TZ) + timedelta(days=1)).strftime("%Y-%m-%d")
+    start_date = (datetime.now(VN_TZ) - timedelta(days=days_back + 2)).strftime("%Y-%m-%d")
 
     # Nếu là VN30F1M → build danh sách symbol ưu tiên:
     #   [mã chính xác, "VN30F1M"] để vnstock cũ khỏi nhầm
@@ -281,7 +281,7 @@ def fetch_data_extended(symbol: str, tf_minutes: int, days_back: int) -> pd.Data
 
 def _simulate(tf_minutes: int, n: int = 350, seed: int = 42) -> pd.DataFrame:
     np.random.seed(seed)
-    now   = datetime.now().replace(second=0, microsecond=0)
+    now   = datetime.now(VN_TZ).replace(second=0, microsecond=0)
     now  -= timedelta(minutes=now.minute % tf_minutes)
     times = [now - timedelta(minutes=tf_minutes * i) for i in range(n)][::-1]
     p = [1280.0]
@@ -1044,8 +1044,8 @@ def push_alert(score: int, confluence: dict, forecast: dict, price: float, regim
     st.session_state.alert_last_score = score
     direction = "LONG" if score > 0 else "SHORT"
     st.session_state.alert_history.insert(0, {
-        "time":    datetime.now().strftime("%H:%M:%S"),
-        "date":    datetime.now().strftime("%d/%m/%Y"),
+        "time":    datetime.now(VN_TZ).strftime("%H:%M:%S"),
+        "date":    datetime.now(VN_TZ).strftime("%d/%m/%Y"),
         "score":   score,
         "direction": direction,
         "rec":     confluence["rec"],
@@ -1325,8 +1325,8 @@ def add_trade(direction, entry, tp1, tp2, tp3, sl, size,
               score=0, regime="", signal_tag="Thủ công"):
     st.session_state.trade_history.insert(0, {
         "id":         len(st.session_state.trade_history) + 1,
-        "date":       datetime.now().strftime("%d/%m/%Y"),
-        "time":       datetime.now().strftime("%H:%M:%S"),
+        "date":       datetime.now(VN_TZ).strftime("%d/%m/%Y"),
+        "time":       datetime.now(VN_TZ).strftime("%H:%M:%S"),
         "exit_time":  "-",
         "direction":  direction,
         "entry":      entry,
@@ -1343,7 +1343,7 @@ def close_trade(idx, exit_price, reason="Đóng thủ công"):
     t = st.session_state.trade_history[idx]
     if t["status"] != "OPEN": return
     pts = (exit_price - t["entry"]) * (1 if t["direction"]=="LONG" else -1)
-    t.update({"status":"CLOSED","exit_price":exit_price,"exit_time":datetime.now().strftime("%H:%M:%S"),
+    t.update({"status":"CLOSED","exit_price":exit_price,"exit_time":datetime.now(VN_TZ).strftime("%H:%M:%S"),
                "reason":reason,"pnl_points":pts,"pnl":pts*t["size"]*100_000})
 
 def auto_check_trades(cp, target_tp):
@@ -1489,8 +1489,8 @@ if is_simulated:
     with st.expander("🔍 Xem chi tiết lỗi vnstock3 (debug)"):
         _exp_info2 = get_vn30f1m_expiry_info()
         _sym_test  = _exp_info2["exact_symbol"]
-        _start_t   = (datetime.now() - timedelta(days=5)).strftime("%Y-%m-%d")
-        _end_t     = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+        _start_t   = (datetime.now(VN_TZ) - timedelta(days=5)).strftime("%Y-%m-%d")
+        _end_t     = (datetime.now(VN_TZ) + timedelta(days=1)).strftime("%Y-%m-%d")
         st.code(f"Symbol thử: {_sym_test}  |  start={_start_t}  end={_end_t}", language="text")
 
         # Test vnstock3
@@ -1727,7 +1727,7 @@ with chart_col:
 
     with tab1:
         st.plotly_chart(build_chart(
-            df1, f"{symbol}·1P·{datetime.now().strftime('%H:%M:%S')}",
+            df1, f"{symbol}·1P·{datetime.now(VN_TZ).strftime('%H:%M:%S')}",
             show_ema, show_bb, show_signals, show_trades,
             show_vwap, show_vwap_bands, show_patterns, score,
             pattern_history=pat_hist1,
@@ -1735,7 +1735,7 @@ with chart_col:
 
     with tab5:
         st.plotly_chart(build_chart(
-            df5, f"{symbol}·5P·{datetime.now().strftime('%H:%M:%S')}",
+            df5, f"{symbol}·5P·{datetime.now(VN_TZ).strftime('%H:%M:%S')}",
             show_ema, show_bb, show_signals, show_trades,
             show_vwap, show_vwap_bands, show_patterns, score,
             pattern_history=pat_hist5,
@@ -2167,12 +2167,12 @@ _bars_label = f" · {len(df1_raw)}b/1m · {len(df5_raw)}b/5m"
 fl.markdown(
     f'<div style="font-size:10px;color:#334155;font-family:JetBrains Mono">'
     f'VN30F Terminal v3 · {_src_label}{_hrs_label}{_bars_label} · '
-    f'{datetime.now().strftime("%d/%m/%Y %H:%M:%S")}</div>',
+    f'{datetime.now(VN_TZ).strftime("%d/%m/%Y %H:%M:%S")}</div>',
     unsafe_allow_html=True
 )
 if auto_refresh:
-    rem = max(0, refresh_sec-(datetime.now()-st.session_state.last_refresh).seconds)
+    rem = max(0, refresh_sec-(datetime.now(VN_TZ)-st.session_state.last_refresh).seconds)
     fr.markdown(f'<div style="font-size:10px;color:#38bdf8;font-family:JetBrains Mono;text-align:right">🔄 {rem}s</div>', unsafe_allow_html=True)
-    if (datetime.now()-st.session_state.last_refresh).seconds >= refresh_sec:
-        st.session_state.last_refresh = datetime.now()
+    if (datetime.now(VN_TZ)-st.session_state.last_refresh).seconds >= refresh_sec:
+        st.session_state.last_refresh = datetime.now(VN_TZ)
     time.sleep(1); st.rerun()
