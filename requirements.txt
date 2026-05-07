@@ -2,4 +2,5 @@ streamlit
 plotly
 pandas
 vnstock3
-ta
+vnstock
+pytz
