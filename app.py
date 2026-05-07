@@ -1076,39 +1076,12 @@ def get_signal_history(df, tf_label):
 # ══════════════════════════════════════════════════════════════
 with st.sidebar:
     st.markdown('<div style="font-family:JetBrains Mono;font-size:16px;font-weight:700;color:#38bdf8;padding:6px 0 14px">⚡ VN30F TERMINAL v4</div>', unsafe_allow_html=True)
-    symbol = st.selectbox("Hợp đồng", ["VN30F1M","VN30F1Q","VN30F2Q"], index=0)
-    auto_refresh = st.toggle("🔄 Tự động cập nhật", value=True)
-    refresh_sec  = st.slider("Chu kỳ (giây)", 10, 120, 30) if auto_refresh else 30
-
-    st.markdown('<div class="sec-hdr" style="margin-top:14px">📊 BIỂU ĐỒ</div>', unsafe_allow_html=True)
-    show_ema        = st.toggle("EMA 9/21/50", value=True)
-    show_bb         = st.toggle("Bollinger Bands", value=True)
-    show_signals    = st.toggle("Mũi tên tín hiệu", value=True)
-    show_trades     = st.toggle("Đường Entry/TP/SL", value=True)
-    show_vwap       = st.toggle("VWAP", value=True)
-    show_vwap_bands = st.toggle("VWAP Bands (±1σ / ±2σ)", value=True)
-    show_patterns   = st.toggle("🕯️ Mẫu nến trên chart", value=True)
-
-    st.markdown('<div class="sec-hdr" style="margin-top:14px">🤖 QUẢN LÝ RỦI RO</div>', unsafe_allow_html=True)
-    lot_size  = st.number_input("Số hợp đồng", min_value=1, max_value=50, value=1)
-    auto_sltp = st.toggle("Bot tự tính SL/TP theo ATR", value=True)
-    if not auto_sltp:
-        tp1_points = st.number_input("TP1 (điểm)", min_value=1.0, max_value=50.0, value=4.0, step=0.5)
-        tp2_points = st.number_input("TP2 (điểm)", min_value=1.0, max_value=50.0, value=8.0, step=0.5)
-        tp3_points = st.number_input("TP3 (điểm)", min_value=1.0, max_value=50.0, value=12.0,step=0.5)
-        sl_points  = st.number_input("SL  (điểm)", min_value=1.0, max_value=30.0, value=4.0, step=0.5)
-    auto_tp_target = st.selectbox("Bot đóng lệnh tại", ["tp1","tp2","tp3"], index=2)
-
-    st.markdown("---")
-    st.markdown('<div class="sec-hdr">🔔 CÀI ĐẶT CẢNH BÁO</div>', unsafe_allow_html=True)
-    alert_threshold = st.slider("Ngưỡng Score Alert", 50, 90, 70, step=5)
-    mute_alerts = st.toggle("🔕 Tắt banner cảnh báo", value=False)
-    if st.button("🗑️ Xóa lịch sử cảnh báo", use_container_width=True): st.session_state.alert_history = []; st.session_state.alert_last_score = 0; st.rerun()
-    st.markdown("---")
-    if st.button("🗑️ Xóa toàn bộ lịch sử lệnh", use_container_width=True): st.session_state.trade_history = []; st.rerun()
+    
+    # Khởi tạo các Tab để không bị lỗi undefined biến sb_tab1
+    sb_tab1, sb_tab2, sb_tab3 = st.tabs(["⚙️ Cơ bản", "📊 Biểu đồ", "🤖 Bot"])
 
     # ──────────────────────────────────────────────────────
-    # TAB 1 – CƠ BẢN
+    # TAB 1 – CƠ BẢN & CẢNH BÁO
     # ──────────────────────────────────────────────────────
     with sb_tab1:
         symbol = st.selectbox("Hợp đồng", ["VN30F1M","VN30F1Q","VN30F2Q"], index=0)
@@ -1122,12 +1095,50 @@ with st.sidebar:
         refresh_sec  = st.slider("Chu kỳ (giây)", 10, 120, 30) if auto_refresh else 30
 
         st.markdown("---")
+        st.markdown('<div class="sec-hdr">🔔 CÀI ĐẶT CẢNH BÁO</div>', unsafe_allow_html=True)
         alert_threshold = st.slider("Ngưỡng Score Alert", 50, 90, 70, step=5)
         mute_alerts = st.toggle("🔕 Tắt banner cảnh báo", value=False)
-        if st.button("🗑️ Xóa lịch sử lệnh", use_container_width=True): 
+        
+        if st.button("🗑️ Xóa lịch sử cảnh báo", use_container_width=True): 
+            st.session_state.alert_history = []
+            st.session_state.alert_last_score = 0
+            st.rerun()
+            
+        if st.button("🗑️ Xóa toàn bộ lịch sử lệnh", use_container_width=True, key="clear_trades_tab1"): 
             st.session_state.trade_history = []
             st.rerun()
 
+    # ──────────────────────────────────────────────────────
+    # TAB 2 – BIỂU ĐỒ
+    # ──────────────────────────────────────────────────────
+    with sb_tab2:
+        st.markdown('<div class="sec-hdr" style="margin-top:14px">📊 BIỂU ĐỒ</div>', unsafe_allow_html=True)
+        show_ema        = st.toggle("EMA 9/21/50", value=True)
+        show_bb         = st.toggle("Bollinger Bands", value=True)
+        show_signals    = st.toggle("Mũi tên tín hiệu", value=True)
+        show_trades     = st.toggle("Đường Entry/TP/SL", value=True)
+        show_vwap       = st.toggle("VWAP", value=True)
+        show_vwap_bands = st.toggle("VWAP Bands (±1σ / ±2σ)", value=True)
+        show_patterns   = st.toggle("🕯️ Mẫu nến trên chart", value=True)
+
+    # ──────────────────────────────────────────────────────
+    # TAB 3 – QUẢN LÝ RỦI RO / BOT
+    # ──────────────────────────────────────────────────────
+    with sb_tab3:
+        st.markdown('<div class="sec-hdr" style="margin-top:14px">🤖 QUẢN LÝ RỦI RO</div>', unsafe_allow_html=True)
+        lot_size  = st.number_input("Số hợp đồng", min_value=1, max_value=50, value=1)
+        auto_sltp = st.toggle("Bot tự tính SL/TP theo ATR", value=True)
+        
+        if not auto_sltp:
+            tp1_points = st.number_input("TP1 (điểm)", min_value=1.0, max_value=50.0, value=4.0, step=0.5)
+            tp2_points = st.number_input("TP2 (điểm)", min_value=1.0, max_value=50.0, value=8.0, step=0.5)
+            tp3_points = st.number_input("TP3 (điểm)", min_value=1.0, max_value=50.0, value=12.0, step=0.5)
+            sl_points  = st.number_input("SL  (điểm)", min_value=1.0, max_value=30.0, value=4.0, step=0.5)
+        else:
+            # Gán giá trị mặc định để tránh NameError khi auto_sltp = True
+            tp1_points, tp2_points, tp3_points, sl_points = 4.0, 8.0, 12.0, 4.0
+            
+        auto_tp_target = st.selectbox("Bot đóng lệnh tại", ["tp1","tp2","tp3"], index=2)
     # ──────────────────────────────────────────────────────
     # TAB 2 – BIỂU ĐỒ
     # ──────────────────────────────────────────────────────
