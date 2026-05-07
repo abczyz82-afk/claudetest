@@ -1,46 +1,51 @@
+# ══════════════════════════════════════════════════════════════
+# DỮ LIỆU – VNSTOCK THỰC + FALLBACK MÔ PHỎNG
+# ══════════════════════════════════════════════════════════════
 @st.cache_data(ttl=30, show_spinner=False)
 def fetch_data(symbol: str, tf_minutes: int, days_back: int = 7) -> pd.DataFrame:
-    """Thử vnstock3 → vnstock cũ → fallback mô phỏng."""
-    # TRICK: Ép buộc quét tối thiểu 15 ngày để luôn bao trọn cuối tuần và ngày lễ dài
-    days_back = max(days_back, 15)
-    today      = datetime.now().strftime("%Y-%m-%d")
-    start_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d")
+    """Lấy dữ liệu thật, tự động lùi ngày quét qua cuối tuần nhưng không ép đủ số ngày."""
+    
+    # Cộng thêm 4 ngày vào chu kỳ quét để bù trừ Thứ 7, CN hoặc nghỉ lễ.
+    # API sẽ tự động trả về số nến thực tế đang có (kể cả khi hợp đồng mới đáo hạn chỉ có 1-2 ngày).
+    start_date = (datetime.now() - timedelta(days=days_back + 4)).strftime("%Y-%m-%d")
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    df = None
 
     # --- Thử vnstock3 (phiên bản mới) ---
     try:
         from vnstock3 import Vnstock
         vn = Vnstock().stock(symbol=symbol, source="VCI")
-        df = vn.quote.history(start=start_date, end=today, interval=f"{tf_minutes}m")
-        if df is not None and not df.empty:
-            # FIX LỖI: Đưa toàn bộ tên cột về chữ thường để tránh lỗi KeyError
-            df.columns = [c.lower() for c in df.columns]
+        df_temp = vn.quote.history(start=start_date, end=today, interval=f"{tf_minutes}m")
+        if df_temp is not None and not df_temp.empty:
+            df = df_temp
+    except Exception:
+        pass
+
+    # --- Thử vnstock cũ (0.2.x) nếu vnstock3 lỗi ---
+    if df is None or df.empty:
+        try:
+            from vnstock import stock_historical_data
+            df_temp = stock_historical_data(symbol=symbol, start_date=start_date, end_date=today,
+                                       resolution=str(tf_minutes), type="derivative")
+            if df_temp is not None and not df_temp.empty:
+                df = df_temp
+        except Exception:
+            pass
+
+    # --- Xử lý dữ liệu nếu lấy thành công ---
+    if df is not None and not df.empty:
+        # Chuẩn hóa tên cột về chữ thường để tránh lỗi KeyError
+        df.columns = [c.lower() for c in df.columns]
+        
+        # Đảm bảo có cột time
+        if "time" not in df.columns:
+            df["time"] = df.index
             
-            if "time" not in df.columns:
-                df["time"] = df.index
-            df["time"] = pd.to_datetime(df["time"])
-            df = df.sort_values("time").set_index("time")
-            return df[["open","high","low","close","volume"]]
-    except Exception:
-        pass
+        df["time"] = pd.to_datetime(df["time"])
+        df = df.sort_values("time").set_index("time")
+        
+        return df[["open", "high", "low", "close", "volume"]]
 
-    # --- Thử vnstock cũ (0.2.x) ---
-    try:
-        from vnstock import stock_historical_data
-        df = stock_historical_data(symbol=symbol, start_date=start_date, end_date=today,
-                                   resolution=str(tf_minutes), type="derivative")
-        if df is not None and not df.empty:
-            df.columns = [c.lower() for c in df.columns]
-            df["time"] = pd.to_datetime(df["time"])
-            return df.sort_values("time").set_index("time")[["open","high","low","close","volume"]]
-    except Exception:
-        pass
-
-    # --- Fallback mô phỏng (seed theo symbol+tf để ổn định) ---
+    # --- Fallback mô phỏng nếu mất kết nối mạng hoặc API sập ---
     return _simulate(tf_minutes, n=350, seed=hash(symbol + str(tf_minutes)) % 9999)
-# ══════════════════════════════════════════════════════════════
-# LOAD DATA
-# ══════════════════════════════════════════════════════════════
-with st.spinner("Đang tải dữ liệu..."):
-    # Tăng days_back lên 15 và 30 để đảm bảo luôn kéo được dữ liệu thật kể cả nghỉ lễ
-    df1_raw = fetch_data(symbol, 1,  days_back=15)
-    df5_raw = fetch_data(symbol, 5,  days_back=30)
