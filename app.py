@@ -1342,8 +1342,8 @@ if _expiry_info and _expiry_info["days_since"] <= 3:
 
 with st.spinner("Đang tải dữ liệu VN30F1M..."):
     # Giải nén tuple thành df và biến chứa nguồn dữ liệu (src)
-    df1_raw, src1 = fetch_data(symbol, 1, days_back=_db1)
-    df5_raw, src5 = fetch_data(symbol, 5, days_back=_db5)
+    # df1_raw, src1 = fetch_data(symbol, 1, days_back=_db1)
+    # df5_raw, src5 = fetch_data(symbol, 5, days_back=_db5)
 
     # Nếu df thiếu bars (do hợp đồng mới), kéo thêm dữ liệu
     MIN_BARS_1 = 50
