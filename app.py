@@ -1075,8 +1075,8 @@ def get_signal_history(df, tf_label):
 # ██ SIDEBAR
 # ══════════════════════════════════════════════════════════════
 with st.sidebar:
-    st.markdown('<div style="font-family:JetBrains Mono;font-size:16px;font-weight:700;color:#38bdf8;padding:6px 0 14px">⚡ VN30F TERMINAL PRO MAX v3</div>', unsafe_allow_html=True)
-     symbol = st.selectbox("Hợp đồng", ["VN30F1M","VN30F1Q","VN30F2Q"], index=0)
+    st.markdown('<div style="font-family:JetBrains Mono;font-size:16px;font-weight:700;color:#38bdf8;padding:6px 0 14px">⚡ VN30F TERMINAL v4</div>', unsafe_allow_html=True)
+    symbol = st.selectbox("Hợp đồng", ["VN30F1M","VN30F1Q","VN30F2Q"], index=0)
     auto_refresh = st.toggle("🔄 Tự động cập nhật", value=True)
     refresh_sec  = st.slider("Chu kỳ (giây)", 10, 120, 30) if auto_refresh else 30
 
@@ -1106,8 +1106,6 @@ with st.sidebar:
     if st.button("🗑️ Xóa lịch sử cảnh báo", use_container_width=True): st.session_state.alert_history = []; st.session_state.alert_last_score = 0; st.rerun()
     st.markdown("---")
     if st.button("🗑️ Xóa toàn bộ lịch sử lệnh", use_container_width=True): st.session_state.trade_history = []; st.rerun()
-    # Định nghĩa cấu trúc Tabs chính của Sidebar
-    sb_tab1, sb_tab2, sb_tab3 = st.tabs(["⚙️ Cơ bản", "📊 Biểu đồ", "🤖 Bot"])
 
     # ──────────────────────────────────────────────────────
     # TAB 1 – CƠ BẢN
