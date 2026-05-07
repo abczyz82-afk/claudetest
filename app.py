@@ -61,7 +61,6 @@ section[data-testid="stSidebar"] *{color:#c0ccdf!important;}
 .wr-row        { display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #1a2540;font-family:'JetBrains Mono',monospace;font-size:11px; }
 </style>
 """, unsafe_allow_html=True)
-
 # ══════════════════════════════════════════════════════════════
 # SESSION STATE
 # ══════════════════════════════════════════════════════════════
