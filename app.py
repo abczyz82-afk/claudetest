@@ -1503,16 +1503,17 @@ if _expiry_info and _expiry_info["days_since"] <= 3:
     )
 
 with st.spinner("Đang tải dữ liệu VN30F1M..."):
-    df1_raw = fetch_data(symbol, 1, days_back=_db1)
-    df5_raw = fetch_data(symbol, 5, days_back=_db5)
+    # Giải nén tuple thành df và biến chứa nguồn dữ liệu (src)
+    df1_raw, src1 = fetch_data(symbol, 1, days_back=_db1)
+    df5_raw, src5 = fetch_data(symbol, 5, days_back=_db5)
 
     # Nếu df thiếu bars (do hợp đồng mới), kéo thêm dữ liệu
     MIN_BARS_1 = 50
     MIN_BARS_5 = 80
     if len(df1_raw) < MIN_BARS_1 and _db1 < 31:
-        df1_raw = fetch_data_extended(symbol, 1, days_back=min(_db1 * 3, 31))
+        df1_raw, src1 = fetch_data_extended(symbol, 1, days_back=min(_db1 * 3, 31))
     if len(df5_raw) < MIN_BARS_5 and _db5 < 31:
-        df5_raw = fetch_data_extended(symbol, 5, days_back=min(_db5 * 3, 31))
+        df5_raw, src5 = fetch_data_extended(symbol, 5, days_back=min(_db5 * 3, 31))
 
 # Không bao giờ dừng – nếu API lỗi, fetch_data đã tự fallback sang mô phỏng
 is_simulated = df1_raw.attrs.get("_simulated", False) or df5_raw.attrs.get("_simulated", False)
