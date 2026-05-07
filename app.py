@@ -1323,7 +1323,7 @@ with st.sidebar:
     alert_threshold = st.slider("Ngưỡng Score Alert", 50, 90, 70, step=5)
     mute_alerts = st.toggle("🔕 Tắt banner cảnh báo", value=False)
     if st.button("🗑️ Xóa lịch sử lệnh", use_container_width=True): st.session_state.trade_history = []; st.rerun()
-
+///
    # ──────────────────────────────────────────────────────
 # TAB 2 – BIỂU ĐỒ
 # ──────────────────────────────────────────────────────
@@ -1427,6 +1427,7 @@ with sb_tab3:
     if st.button("🗑️ Xóa lịch sử lệnh", use_container_width=True, key="clear_trades_bot"):
         st.session_state.trade_history = []
         st.rerun()
+///
 # ══════════════════════════════════════════════════════════════
 # LOAD DATA  – thông minh theo vòng đời hợp đồng & giờ giao dịch
 # ══════════════════════════════════════════════════════════════
