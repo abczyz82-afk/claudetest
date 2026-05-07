@@ -2298,3 +2298,21 @@ if auto_refresh:
     if (datetime.now(VN_TZ)-st.session_state.last_refresh).seconds >= refresh_sec:
         st.session_state.last_refresh = datetime.now(VN_TZ)
     time.sleep(1); st.rerun()
+
+# ══════════════════════════════════════════════════════════════
+# MAIN APP EXECUTION
+# ══════════════════════════════════════════════════════════════
+db1, db5 = smart_days_back(symbol, 1), smart_days_back(symbol, 5)
+
+with st.spinner("Đang tải dữ liệu VN30F1M..."):
+    df1_raw, df5_raw = fetch_data(symbol, 1, db1), fetch_data(symbol, 5, db5)
+
+is_simulated = df1_raw.attrs.get("_simulated", False) or df5_raw.attrs.get("_simulated", False)
+
+if is_simulated:
+    st.warning("🖥️ **Đang dùng dữ liệu MÔ PHỎNG** do API thực trả về rỗng. (Đảm bảo đã cài `vnstock==0.2.8.2`)")
+
+df1, df5 = add_indicators(df1_raw.copy()), add_indicators(df5_raw.copy())
+current_price, prev_close = float(df1["close"].iloc[-1]), float(df1["close"].iloc[-2])
+regime1, regime5 = detect_regime(df1), detect_regime(df5)
+current_atr = regime5["atr"]
