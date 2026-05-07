@@ -1,3 +1,23 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from datetime import datetime, timedelta
+import time
+
+# ══════════════════════════════════════════════════════════════
+# PAGE CONFIG
+# ══════════════════════════════════════════════════════════════
+st.set_page_config(
+    page_title="VN30F Terminal PRO v3",
+    page_icon="⚡",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+# ... (Phần CSS và Session State của bạn giữ nguyên ở đây) ...
+
 # ══════════════════════════════════════════════════════════════
 # DỮ LIỆU – VNSTOCK THỰC + FALLBACK MÔ PHỎNG
 # ══════════════════════════════════════════════════════════════
@@ -6,7 +26,6 @@ def fetch_data(symbol: str, tf_minutes: int, days_back: int = 7) -> pd.DataFrame
     """Lấy dữ liệu thật, tự động lùi ngày quét qua cuối tuần nhưng không ép đủ số ngày."""
     
     # Cộng thêm 4 ngày vào chu kỳ quét để bù trừ Thứ 7, CN hoặc nghỉ lễ.
-    # API sẽ tự động trả về số nến thực tế đang có (kể cả khi hợp đồng mới đáo hạn chỉ có 1-2 ngày).
     start_date = (datetime.now() - timedelta(days=days_back + 4)).strftime("%Y-%m-%d")
     today = datetime.now().strftime("%Y-%m-%d")
 
@@ -35,10 +54,8 @@ def fetch_data(symbol: str, tf_minutes: int, days_back: int = 7) -> pd.DataFrame
 
     # --- Xử lý dữ liệu nếu lấy thành công ---
     if df is not None and not df.empty:
-        # Chuẩn hóa tên cột về chữ thường để tránh lỗi KeyError
         df.columns = [c.lower() for c in df.columns]
         
-        # Đảm bảo có cột time
         if "time" not in df.columns:
             df["time"] = df.index
             
@@ -47,5 +64,7 @@ def fetch_data(symbol: str, tf_minutes: int, days_back: int = 7) -> pd.DataFrame
         
         return df[["open", "high", "low", "close", "volume"]]
 
-    # --- Fallback mô phỏng nếu mất kết nối mạng hoặc API sập ---
+    # --- Fallback mô phỏng ---
     return _simulate(tf_minutes, n=350, seed=hash(symbol + str(tf_minutes)) % 9999)
+
+# ... (Các hàm khác như _simulate, add_indicators... giữ nguyên bên dưới) ...
