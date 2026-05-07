@@ -176,112 +176,39 @@ def is_trading_hours() -> bool:
 
 
 @st.cache_data(ttl=30, show_spinner=False)
-def fetch_data(symbol: str, tf_minutes: int, days_back: int = 7):
-    """
-    Tải dữ liệu OHLCV: Ưu tiên vnstock3 (API Derivatives VCI) -> vnstock cũ -> Mô phỏng
-    """
+def fetch_data(symbol: str, tf_minutes: int, days_back: int = 7) -> pd.DataFrame:
     end_date   = (datetime.now(VN_TZ) + timedelta(days=1)).strftime("%Y-%m-%d")
     start_date = (datetime.now(VN_TZ) - timedelta(days=days_back + 2)).strftime("%Y-%m-%d")
 
-    if symbol == "VN30F1M":
-        exp_info = get_vn30f1m_expiry_info()
-        symbols_to_try = [exp_info["exact_symbol"], "VN30F1M"]
-    else:
-        symbols_to_try = [symbol]
+    symbols_to_try = [get_vn30f1m_expiry_info()["exact_symbol"], "VN30F1M"] if symbol == "VN30F1M" else [symbol]
 
     def _clean(df: pd.DataFrame) -> pd.DataFrame:
         df = df.rename(columns={c: c.lower() for c in df.columns})
-        if "time" not in df.columns:
-            df["time"] = pd.to_datetime(df.index)
-        else:
-            df["time"] = pd.to_datetime(df["time"])
+        if "time" not in df.columns: df["time"] = pd.to_datetime(df.index)
+        else: df["time"] = pd.to_datetime(df["time"])
         df = df.sort_values("time").set_index("time")
         cols = [c for c in ["open","high","low","close","volume"] if c in df.columns]
-        df = df[cols].dropna(how="all")
-        return df
+        return df[cols].dropna(how="all")
 
-    # 1. ƯU TIÊN CAO NHẤT: vnstock3 dùng đúng API derivatives và nguồn VCI
-    import logging
-    logging.getLogger("vnstock3").setLevel(logging.CRITICAL) 
-    
     for sym in symbols_to_try:
         try:
-            from vnstock3 import Vnstock
-            # Sử dụng .derivatives() thay vì .stock() cho Phái sinh
-            vn = Vnstock().derivatives(symbol=sym, source="VCI")
-            df = vn.quote.history(start=start_date, end=end_date, interval=f"{tf_minutes}m")
+            from vnstock import stock_historical_data
+            df = stock_historical_data(symbol=sym, start_date=start_date, end_date=end_date, resolution=str(tf_minutes), type="derivative")
             if df is not None and not df.empty:
                 df = _clean(df)
                 if not df.empty and len(df) > 5:
-                    return df, "Vnstock3 (VCI Derivatives)"
+                    df.attrs["_simulated"] = False
+                    return df
         except Exception:
             continue
 
-    # 2. ƯU TIÊN HAI: vnstock bản cũ (0.2.x)
-    for sym in symbols_to_try:
-        try:
-            from vnstock import stock_historical_data
-            df = stock_historical_data(
-                symbol=sym, start_date=start_date, end_date=end_date,
-                resolution=str(tf_minutes), type="derivative"
-            )
-            if df is not None and not df.empty:
-                df = _clean(df)
-                if not df.empty and len(df) > 5:
-                    return df, "Vnstock (0.2.x)"
-        except Exception:
-            pass
+    df_sim = _simulate(tf_minutes, n=350, seed=hash(symbol + str(tf_minutes)) % 9999)
+    df_sim.attrs["_simulated"] = True
+    return df_sim
 
-    # 3. MÔ PHỎNG (Fallback cuối cùng)
-    return _simulate(tf_minutes, n=350, seed=hash(symbol + str(tf_minutes)) % 9999), "Mô phỏng (Fallback)"
-
-    def _clean(df: pd.DataFrame) -> pd.DataFrame:
-        df = df.rename(columns={c: c.lower() for c in df.columns})
-        if "time" not in df.columns:
-            df["time"] = pd.to_datetime(df.index)
-        else:
-            df["time"] = pd.to_datetime(df["time"])
-        df = df.sort_values("time").set_index("time")
-        cols = [c for c in ["open","high","low","close","volume"] if c in df.columns]
-        df = df[cols].dropna(how="all")
-        return df
-
-    # 1. ƯU TIÊN CAO NHẤT: vnstock bản cũ (0.2.x) cực kỳ ổn định cho Phái sinh
-    for sym in symbols_to_try:
-        try:
-            from vnstock import stock_historical_data
-            df = stock_historical_data(
-                symbol=sym, start_date=start_date, end_date=end_date,
-                resolution=str(tf_minutes), type="derivative"
-            )
-            if df is not None and not df.empty:
-                df = _clean(df)
-                if not df.empty and len(df) > 5:
-                    source_used = "Vnstock (0.2.x)"
-                    return df, source_used
-        except Exception:
-            pass
-
-    # 2. ƯU TIÊN HAI: vnstock3 (Tắt spam log để tránh treo máy)
-    for sym in symbols_to_try:
-        try:
-            import logging
-            # Bịt miệng log spam của vnstock3
-            logging.getLogger("vnstock3").setLevel(logging.CRITICAL) 
-            from vnstock3 import Vnstock
-            for src in ["TCBS", "SSI", "VCI"]:
-                try:
-                    vn  = Vnstock().stock(symbol=sym, source=src)
-                    df  = vn.quote.history(start=start_date, end=end_date, interval=f"{tf_minutes}m")
-                    if df is not None and not df.empty:
-                        df = _clean(df)
-                        if not df.empty and len(df) > 5:
-                            source_used = f"Vnstock3 ({src})"
-                            return df, source_used
-                except Exception:
-                    continue
-        except Exception:
-            pass
+@st.cache_data(ttl=300, show_spinner=False)
+def fetch_data_extended(symbol: str, tf_minutes: int, days_back: int) -> pd.DataFrame:
+    return fetch_data(symbol, tf_minutes, days_back)
 
     # 3. MÔ PHỎNG (Nếu cả 2 API đều sập)
     return _simulate(tf_minutes, n=350, seed=hash(symbol + str(tf_minutes)) % 9999), source_used
