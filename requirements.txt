@@ -4,3 +4,4 @@ pandas
 vnstock3
 vnstock
 pytz
+ipython
