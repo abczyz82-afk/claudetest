@@ -1,7 +1,5 @@
 streamlit
 plotly
 pandas
-vnstock3
-vnstock
-pytz
-ipython
+vnstock==0.2.8.2
+ta
