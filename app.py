@@ -18,9 +18,6 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ══════════════════════════════════════════════════════════════
-# CSS
-# ══════════════════════════════════════════════════════════════
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
@@ -48,45 +45,16 @@ section[data-testid="stSidebar"] *{color:#c0ccdf!important;}
 .stButton>button:hover{background:linear-gradient(135deg,#1d4ed8,#3b82f6);}
 .stTabs [data-baseweb="tab"]{font-family:'JetBrains Mono',monospace;font-size:11px;color:#475569;}
 .stTabs [aria-selected="true"]{color:#38bdf8!important;border-bottom-color:#38bdf8!important;}
-
-/* Sidebar tab overrides – compact style */
-section[data-testid="stSidebar"] .stTabs [data-baseweb="tab-list"] {
-  gap:0px; background:#080c18; border-bottom:1px solid #1a2540; padding:0;
-}
-section[data-testid="stSidebar"] .stTabs [data-baseweb="tab"] {
-  font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:700;
-  padding:6px 8px; color:#334155!important; letter-spacing:0.5px;
-  border-radius:0; flex:1; justify-content:center;
-}
-section[data-testid="stSidebar"] .stTabs [aria-selected="true"] {
-  color:#38bdf8!important; border-bottom:2px solid #38bdf8!important;
-  background:#0c1020!important;
-}
-section[data-testid="stSidebar"] .stTabs [data-baseweb="tab-panel"] {
-  padding: 10px 0 0 0;
-}
-section[data-testid="stSidebar"] .stTabs { border:none; }
-/* Sidebar toggle labels */
-section[data-testid="stSidebar"] .stToggle label { font-size:11px!important; font-family:'JetBrains Mono',monospace!important; }
-section[data-testid="stSidebar"] .stSlider label, 
-section[data-testid="stSidebar"] .stNumberInput label,
-section[data-testid="stSidebar"] .stSelectbox label { font-size:11px!important; font-family:'JetBrains Mono',monospace!important; color:#64748b!important; }
 #MainMenu,footer,header{visibility:hidden;}
 .block-container{padding-top:0.8rem;padding-bottom:0.5rem;}
 .stSelectbox>div>div,.stNumberInput>div>div>input{background:#0f1626;border-color:#1a2540;color:#dde4f0;}
-
-/* Alert Banner */
 @keyframes pulse-green { 0%,100%{box-shadow:0 0 0 0 #00e67644} 50%{box-shadow:0 0 20px 4px #00e67622} }
 @keyframes pulse-red    { 0%,100%{box-shadow:0 0 0 0 #ff525244} 50%{box-shadow:0 0 20px 4px #ff525222} }
 .alert-long  { background:linear-gradient(135deg,#031a0d,#052212,#072e18);border:2px solid #00e676;border-radius:12px;padding:16px 20px;animation:pulse-green 2s infinite;font-family:'JetBrains Mono',monospace; }
 .alert-short { background:linear-gradient(135deg,#1a0303,#220505,#2e0707);border:2px solid #ff5252;border-radius:12px;padding:16px 20px;animation:pulse-red 2s infinite;font-family:'JetBrains Mono',monospace; }
 .alert-muted { background:#0f1626;border:1px solid #1a2540;border-radius:12px;padding:16px 20px;font-family:'JetBrains Mono',monospace;opacity:0.5; }
-
-/* Alert log row */
 .alert-row-long  { border-left:3px solid #00e676;background:#0a1f12;border-radius:5px;padding:7px 10px;margin-bottom:4px;font-family:'JetBrains Mono',monospace;font-size:11px; }
 .alert-row-short { border-left:3px solid #ff5252;background:#1f0a0a;border-radius:5px;padding:7px 10px;margin-bottom:4px;font-family:'JetBrains Mono',monospace;font-size:11px; }
-
-/* Win rate badge */
 .wr-badge-good { background:#052212;border:1px solid #00e676;color:#00e676;border-radius:5px;padding:3px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700; }
 .wr-badge-bad  { background:#220505;border:1px solid #ff5252;color:#ff5252;border-radius:5px;padding:3px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700; }
 .wr-badge-mid  { background:#141205;border:1px solid #ffd600;color:#ffd600;border-radius:5px;padding:3px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700; }
