@@ -18,50 +18,6 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
-html,body,[class*="css"]{font-family:'Space Grotesk',sans-serif;background:#080c18;color:#dde4f0;}
-.stApp{background:#080c18;}
-section[data-testid="stSidebar"]{background:#0c1020;border-right:1px solid #1a2540;}
-section[data-testid="stSidebar"] *{color:#c0ccdf!important;}
-.metric-box{background:#0f1626;border:1px solid #1a2540;border-radius:8px;padding:12px 14px;text-align:center;}
-.metric-label{font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:4px;font-family:'JetBrains Mono',monospace;}
-.metric-value{font-family:'JetBrains Mono',monospace;font-size:17px;font-weight:700;}
-.green{color:#00e676;}.red{color:#ff5252;}.yellow{color:#ffd600;}.white{color:#f1f5f9;}.blue{color:#38bdf8;}.purple{color:#a78bfa;}
-.signal-card{border-radius:10px;padding:14px 18px;margin-bottom:8px;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:13px;text-align:center;}
-.uptrend{background:linear-gradient(135deg,#0a2218,#0d311f);border:1.5px solid #00e676;color:#00e676;}
-.downtrend{background:linear-gradient(135deg,#220a0a,#310d0d);border:1.5px solid #ff5252;color:#ff5252;}
-.sideway{background:linear-gradient(135deg,#18180a,#26240a);border:1.5px solid #ffd600;color:#ffd600;}
-.sec-hdr{font-size:10px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;color:#334155;border-bottom:1px solid #1a2540;padding-bottom:5px;margin-bottom:10px;font-family:'JetBrains Mono',monospace;}
-.rec-strong-long{background:linear-gradient(135deg,#052212,#072e18);border:2px solid #00e676;border-radius:12px;padding:18px 20px;font-family:'JetBrains Mono',monospace;}
-.rec-strong-short{background:linear-gradient(135deg,#220505,#2e0707);border:2px solid #ff5252;border-radius:12px;padding:18px 20px;font-family:'JetBrains Mono',monospace;}
-.rec-watch{background:linear-gradient(135deg,#141205,#1c1a07);border:2px solid #ffd600;border-radius:12px;padding:18px 20px;font-family:'JetBrains Mono',monospace;}
-.rec-neutral{background:#0f1626;border:1.5px solid #1a2540;border-radius:12px;padding:18px 20px;font-family:'JetBrains Mono',monospace;}
-.score-bar-wrap{background:#1a2540;border-radius:6px;height:12px;width:100%;margin:8px 0;}
-.forecast-box{background:#0f1626;border:1px solid #1a2540;border-radius:8px;padding:12px 14px;margin-bottom:8px;font-family:'JetBrains Mono',monospace;font-size:11px;}
-.pattern-tag{display:inline-block;border-radius:4px;padding:2px 7px;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;margin:2px;}
-.stButton>button{background:linear-gradient(135deg,#1e3a8a,#1d4ed8);color:#fff;border:none;border-radius:6px;font-family:'JetBrains Mono',monospace;font-weight:600;}
-.stButton>button:hover{background:linear-gradient(135deg,#1d4ed8,#3b82f6);}
-.stTabs [data-baseweb="tab"]{font-family:'JetBrains Mono',monospace;font-size:11px;color:#475569;}
-.stTabs [aria-selected="true"]{color:#38bdf8!important;border-bottom-color:#38bdf8!important;}
-#MainMenu,footer,header{visibility:hidden;}
-.block-container{padding-top:0.8rem;padding-bottom:0.5rem;}
-.stSelectbox>div>div,.stNumberInput>div>div>input{background:#0f1626;border-color:#1a2540;color:#dde4f0;}
-@keyframes pulse-green { 0%,100%{box-shadow:0 0 0 0 #00e67644} 50%{box-shadow:0 0 20px 4px #00e67622} }
-@keyframes pulse-red    { 0%,100%{box-shadow:0 0 0 0 #ff525244} 50%{box-shadow:0 0 20px 4px #ff525222} }
-.alert-long  { background:linear-gradient(135deg,#031a0d,#052212,#072e18);border:2px solid #00e676;border-radius:12px;padding:16px 20px;animation:pulse-green 2s infinite;font-family:'JetBrains Mono',monospace; }
-.alert-short { background:linear-gradient(135deg,#1a0303,#220505,#2e0707);border:2px solid #ff5252;border-radius:12px;padding:16px 20px;animation:pulse-red 2s infinite;font-family:'JetBrains Mono',monospace; }
-.alert-muted { background:#0f1626;border:1px solid #1a2540;border-radius:12px;padding:16px 20px;font-family:'JetBrains Mono',monospace;opacity:0.5; }
-.alert-row-long  { border-left:3px solid #00e676;background:#0a1f12;border-radius:5px;padding:7px 10px;margin-bottom:4px;font-family:'JetBrains Mono',monospace;font-size:11px; }
-.alert-row-short { border-left:3px solid #ff5252;background:#1f0a0a;border-radius:5px;padding:7px 10px;margin-bottom:4px;font-family:'JetBrains Mono',monospace;font-size:11px; }
-.wr-badge-good { background:#052212;border:1px solid #00e676;color:#00e676;border-radius:5px;padding:3px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700; }
-.wr-badge-bad  { background:#220505;border:1px solid #ff5252;color:#ff5252;border-radius:5px;padding:3px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700; }
-.wr-badge-mid  { background:#141205;border:1px solid #ffd600;color:#ffd600;border-radius:5px;padding:3px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700; }
-.wr-row        { display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #1a2540;font-family:'JetBrains Mono',monospace;font-size:11px; }
-</style>
-""", unsafe_allow_html=True)
-
 # ══════════════════════════════════════════════════════════════
 # CSS
 # ══════════════════════════════════════════════════════════════
@@ -1760,49 +1716,6 @@ if is_simulated:
         except Exception as _e:
             st.error(f"❌ Lỗi khi lấy dữ liệu: {_e}")
 
-if _new_contract_warn:
-    st.warning(_new_contract_warn)
-
-if is_simulated:
-    st.warning(
-        "🖥️ **Đang dùng dữ liệu MÔ PHỎNG** — không lấy được dữ liệu thực từ vnstock. "
-        "Kiểm tra kết nối mạng hoặc cài `vnstock3`: `pip install vnstock3`"
-    )
-    # Debug: hiện lỗi cụ thể để dễ fix
-    with st.expander("🔍 Xem chi tiết lỗi vnstock3 (debug)"):
-        _exp_info2 = get_vn30f1m_expiry_info()
-        _sym_test  = _exp_info2["exact_symbol"]
-        _start_t   = (datetime.now(VN_TZ) - timedelta(days=5)).strftime("%Y-%m-%d")
-        _end_t     = (datetime.now(VN_TZ) + timedelta(days=1)).strftime("%Y-%m-%d")
-        st.code(f"Symbol thử: {_sym_test}  |  start={_start_t}  end={_end_t}", language="text")
-
-        # Test vnstock3
-        try:
-            from vnstock3 import Vnstock
-            st.success("✅ import vnstock3 OK")
-            for _src in ["DNSE", "VCI"]:
-                try:
-                    _vn = Vnstock().stock(symbol=_sym_test, source=_src)
-                    _df = _vn.quote.history(start=_start_t, end=_end_t, interval="5m")
-                    if _df is not None and not _df.empty:
-                        st.success(f"✅ vnstock3 source={_src}: {len(_df)} dòng")
-                    else:
-                        st.error(f"❌ vnstock3 source={_src}: trả về rỗng")
-                except Exception as _e:
-                    st.error(f"❌ vnstock3 source={_src}: {_e}")
-            # Thử Derivatives
-            try:
-                _vn2 = Vnstock().derivatives(symbol=_sym_test, source="VCI")
-                _df2 = _vn2.quote.history(start=_start_t, end=_end_t, interval="5m")
-                if _df2 is not None and not _df2.empty:
-                    st.success(f"✅ vnstock3 derivatives: {len(_df2)} dòng")
-                else:
-                    st.error("❌ vnstock3 derivatives: trả về rỗng")
-            except Exception as _e:
-                st.error(f"❌ vnstock3 derivatives: {_e}")
-        except ImportError as _e:
-            st.error(f"❌ Không import được vnstock3: {_e}")
-
 df1 = add_indicators(df1_raw.copy())
 df5 = add_indicators(df5_raw.copy())
 
@@ -2459,21 +2372,3 @@ if auto_refresh:
     if (datetime.now(VN_TZ)-st.session_state.last_refresh).seconds >= refresh_sec:
         st.session_state.last_refresh = datetime.now(VN_TZ)
     time.sleep(1); st.rerun()
-
-# ══════════════════════════════════════════════════════════════
-# MAIN APP EXECUTION
-# ══════════════════════════════════════════════════════════════
-db1, db5 = smart_days_back(symbol, 1), smart_days_back(symbol, 5)
-
-with st.spinner("Đang tải dữ liệu VN30F1M..."):
-    df1_raw, df5_raw = fetch_data(symbol, 1, db1), fetch_data(symbol, 5, db5)
-
-is_simulated = df1_raw.attrs.get("_simulated", False) or df5_raw.attrs.get("_simulated", False)
-
-if is_simulated:
-    st.warning("🖥️ **Đang dùng dữ liệu MÔ PHỎNG** do API thực trả về rỗng. (Đảm bảo đã cài `vnstock==0.2.8.2`)")
-
-df1, df5 = add_indicators(df1_raw.copy()), add_indicators(df5_raw.copy())
-current_price, prev_close = float(df1["close"].iloc[-1]), float(df1["close"].iloc[-2])
-regime1, regime5 = detect_regime(df1), detect_regime(df5)
-current_atr = regime5["atr"]
