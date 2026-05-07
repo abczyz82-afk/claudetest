@@ -109,6 +109,7 @@ def get_vn30f1m_expiry_info() -> dict:
       - days_since   : số ngày kể từ khi hợp đồng bắt đầu
       - days_to      : số ngày còn đến đáo hạn
       - contract_name: tên tháng hợp đồng (VD "VN30F2506")
+      - exact_symbol : mã chính xác cho API (VD "VN30F2605")
     """
     now = datetime.now()
 
@@ -116,14 +117,12 @@ def get_vn30f1m_expiry_info() -> dict:
     curr_exp = get_third_thursday(now.year, now.month)
 
     if now.date() > curr_exp.date():
-        # Đã qua đáo hạn tháng này → hợp đồng mới bắt đầu
         last_exp = curr_exp
         nm = now.month + 1 if now.month < 12 else 1
         ny = now.year     if now.month < 12 else now.year + 1
         next_exp = get_third_thursday(ny, nm)
         contract_month, contract_year = nm, ny
     else:
-        # Chưa đáo hạn tháng này
         pm = now.month - 1 if now.month > 1 else 12
         py = now.year      if now.month > 1 else now.year - 1
         last_exp    = get_third_thursday(py, pm)
@@ -132,7 +131,13 @@ def get_vn30f1m_expiry_info() -> dict:
 
     days_since = (now.date() - last_exp.date()).days
     days_to    = (next_exp.date() - now.date()).days
+
+    # Tên hiển thị kiểu VN30F2506 (năm 2 chữ số + tháng 2 chữ số)
     contract_name = f"VN30F{str(contract_year)[-2:]}{contract_month:02d}"
+
+    # Mã chính xác để query vnstock: VN30F2605 (năm trước, tháng sau)
+    # vnstock dùng format: VN30F[YY][MM] trong đó YY=2 số cuối năm, MM=tháng 2 chữ số
+    exact_symbol = f"VN30F{str(contract_year)[-2:]}{contract_month:02d}"
 
     return {
         "last_expiry":    last_exp,
@@ -140,6 +145,7 @@ def get_vn30f1m_expiry_info() -> dict:
         "days_since":     days_since,
         "days_to":        days_to,
         "contract_name":  contract_name,
+        "exact_symbol":   exact_symbol,
     }
 
 
@@ -181,47 +187,63 @@ def is_trading_hours() -> bool:
 def fetch_data(symbol: str, tf_minutes: int, days_back: int = 7) -> pd.DataFrame:
     """
     Tải dữ liệu OHLCV:
-      1. vnstock3 (mới nhất)
-      2. vnstock 0.2.x
-      3. Fallback mô phỏng (luôn có data, không bao giờ trả về rỗng)
+      1. vnstock3 (mới nhất) – thử cả symbol gốc lẫn mã hợp đồng chính xác
+      2. vnstock 0.2.x        – thử cả symbol gốc lẫn mã hợp đồng chính xác
+      3. Fallback mô phỏng   – luôn có data, không bao giờ trả về rỗng
     Ngoài giờ giao dịch vẫn trả về dữ liệu lịch sử đã có.
     """
-    # Lấy thêm 2 ngày buffer để đảm bảo có đủ ngày làm việc
     end_date   = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
     start_date = (datetime.now() - timedelta(days=days_back + 2)).strftime("%Y-%m-%d")
 
-    # --- Thử vnstock3 (phiên bản mới) ---
-    try:
-        from vnstock3 import Vnstock
-        vn = Vnstock().stock(symbol=symbol, source="VCI")
-        df = vn.quote.history(start=start_date, end=end_date, interval=f"{tf_minutes}m")
-        if df is not None and not df.empty:
-            df = df.rename(columns={"open":"open","high":"high","low":"low","close":"close","volume":"volume"})
-            df["time"] = pd.to_datetime(df.index if df.index.name == "time" else df.get("time", df.index))
-            df = df.sort_values("time").set_index("time")
-            df = df[["open","high","low","close","volume"]].dropna(how="all")
-            if not df.empty:
-                return df
-    except Exception:
-        pass
+    # Nếu là VN30F1M → build danh sách symbol ưu tiên:
+    #   [mã chính xác, "VN30F1M"] để vnstock cũ khỏi nhầm
+    if symbol == "VN30F1M":
+        exp_info = get_vn30f1m_expiry_info()
+        symbols_to_try = [exp_info["exact_symbol"], "VN30F1M"]
+    else:
+        symbols_to_try = [symbol]
 
-    # --- Thử vnstock cũ (0.2.x) ---
-    try:
-        from vnstock import stock_historical_data
-        df = stock_historical_data(
-            symbol=symbol, start_date=start_date, end_date=end_date,
-            resolution=str(tf_minutes), type="derivative"
-        )
-        if df is not None and not df.empty:
+    def _clean(df: pd.DataFrame) -> pd.DataFrame:
+        """Chuẩn hóa cột và index."""
+        df = df.rename(columns={c: c.lower() for c in df.columns})
+        if "time" not in df.columns:
+            df["time"] = pd.to_datetime(df.index)
+        else:
             df["time"] = pd.to_datetime(df["time"])
-            df = df.sort_values("time").set_index("time")[["open","high","low","close","volume"]]
-            df = df.dropna(how="all")
-            if not df.empty:
-                return df
-    except Exception:
-        pass
+        df = df.sort_values("time").set_index("time")
+        cols = [c for c in ["open","high","low","close","volume"] if c in df.columns]
+        df = df[cols].dropna(how="all")
+        return df
 
-    # --- Fallback mô phỏng (seed theo symbol+tf để ổn định) ---
+    # ── vnstock3 ──
+    for sym in symbols_to_try:
+        try:
+            from vnstock3 import Vnstock
+            vn  = Vnstock().stock(symbol=sym, source="VCI")
+            df  = vn.quote.history(start=start_date, end=end_date, interval=f"{tf_minutes}m")
+            if df is not None and not df.empty:
+                df = _clean(df)
+                if not df.empty and len(df) > 5:
+                    return df
+        except Exception:
+            pass
+
+    # ── vnstock 0.2.x ──
+    for sym in symbols_to_try:
+        try:
+            from vnstock import stock_historical_data
+            df = stock_historical_data(
+                symbol=sym, start_date=start_date, end_date=end_date,
+                resolution=str(tf_minutes), type="derivative"
+            )
+            if df is not None and not df.empty:
+                df = _clean(df)
+                if not df.empty and len(df) > 5:
+                    return df
+        except Exception:
+            pass
+
+    # ── Fallback mô phỏng ──
     return _simulate(tf_minutes, n=350, seed=hash(symbol + str(tf_minutes)) % 9999)
 
 
@@ -251,7 +273,9 @@ def _simulate(tf_minutes: int, n: int = 350, seed: int = 42) -> pd.DataFrame:
     df["high"]   = df[["open","close"]].max(axis=1) + noise
     df["low"]    = df[["open","close"]].min(axis=1) - noise
     df["volume"] = np.random.randint(200, 3500, n)
-    return df.set_index("time")
+    df = df.set_index("time")
+    df.attrs["_simulated"] = True   # đánh dấu để phân biệt
+    return df
 
 
 # ══════════════════════════════════════════════════════════════
@@ -1423,14 +1447,21 @@ with st.spinner("Đang tải dữ liệu VN30F1M..."):
         df5_raw = fetch_data_extended(symbol, 5, days_back=min(_db5 * 3, 31))
 
 # Không bao giờ dừng – nếu API lỗi, fetch_data đã tự fallback sang mô phỏng
-is_simulated = df1_raw.empty or df5_raw.empty
-if is_simulated:
+is_simulated = df1_raw.attrs.get("_simulated", False) or df5_raw.attrs.get("_simulated", False)
+if df1_raw.empty or df5_raw.empty:
     # Trường hợp cực kỳ hiếm: cả 3 nguồn đều lỗi → tạo dữ liệu mô phỏng tại chỗ
     df1_raw = _simulate(1,  n=350, seed=hash(symbol + "1") % 9999)
     df5_raw = _simulate(5,  n=350, seed=hash(symbol + "5") % 9999)
+    is_simulated = True
 
 if _new_contract_warn:
     st.warning(_new_contract_warn)
+
+if is_simulated:
+    st.warning(
+        "🖥️ **Đang dùng dữ liệu MÔ PHỎNG** — không lấy được dữ liệu thực từ vnstock. "
+        "Kiểm tra kết nối mạng hoặc cài `vnstock3`: `pip install vnstock3`"
+    )
 
 df1 = add_indicators(df1_raw.copy())
 df5 = add_indicators(df5_raw.copy())
